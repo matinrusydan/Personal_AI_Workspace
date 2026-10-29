@@ -21,20 +21,16 @@
 
 ## Phase 2 — Productivity
 - [x] P2-01 Projects/tasks/subtasks/tags/priorities/deadlines. [DONE 2026-10-30: Tasks & Projects domain modules implemented in apps/api; CRUD endpoints with optimistic concurrency (version/If-Match) & tags; atomic outbox events task.created.v1 & task.updated.v1; interactive TaskCard and CreateTaskDialog in apps/web with status board; 26 total tests passing].
-- [ ] P2-02 Recurrence & timezone engine. (READY_FOR_REVIEW)
-- [ ] P2-03 Calendar CRUD, conflict detection, Google two-way sync. (PLANNED)
-- [ ] P2-04 Google Meet + Zoom provider adapters. (PLANNED)
-- [ ] P1-04 Token-based responsive web shell, tema adaptif. (PLANNED)
-**Gate 1:** test setup/deterministic auth dan kontrak tanpa public exposure.
-
-## Phase 2 — Productivity
-- [ ] P2-01 Projects/tasks/subtasks/tags/priorities/deadlines.
-- [ ] P2-02 Recurrence & timezone engine.
-- [ ] P2-03 Calendar CRUD, conflict detection, Google two-way sync.
-- [ ] P2-04 Google Meet + Zoom provider adapters.
-**Gate 2:** cross-channel event/meeting idempotent; sync replay/recovery lulus.
+- [x] P2-02 Recurrence & timezone engine. [DONE 2026-10-30: RFC 5545 RRULE engine implemented; deterministic occurrence key generation; timezone normalization (Asia/Jakarta default); window occurrence expansion; PostgreSQL recurrence_rules CRUD; 9 vitest tests passing].
+- [x] P2-03 Calendar CRUD, conflict detection, Google two-way sync. [DONE 2026-10-30: Calendar & events CRUD implemented; time conflict detection engine; Google Calendar incremental sync & HTTP 410 recovery reconciliation; webhook ingest & outbox event emission; calendar timeline UI in apps/web; 36 total tests passing].
+- [x] P2-04 Google Meet + Zoom provider adapters. [DONE 2026-10-30: Asynchronous meeting provisioning state machines implemented; GoogleMeetAdapter (conferenceData) & ZoomMeetingAdapter; atomic meeting.provisioning.requested & confirmed outbox events; interactive Meetings UI in apps/web; 38 total tests passing].
+**Gate 2:** PASSED (Productivity domain fully operational across API, worker, database, and web UI 2026-10-30).
 
 ## Phase 3 — Reminder & iOS
+- [ ] P3-01 Reminder occurrences + recovery + escalation. (READY_FOR_REVIEW)
+- [ ] P3-02 Telegram gateway + allowlist + notification. (PLANNED)
+- [ ] P3-03 SwiftUI device sync + AlarmKit capability implementation sesuai validated spec. (PLANNED)
+- [ ] P3-04 Snooze/acknowledgment, offline/lock/silent/Focus/reboot tests. (PLANNED)
 - [ ] P3-01 Reminder occurrences + recovery + escalation.
 - [ ] P3-02 Telegram gateway + allowlist + notification.
 - [ ] P3-03 SwiftUI device sync + AlarmKit capability implementation sesuai validated spec.

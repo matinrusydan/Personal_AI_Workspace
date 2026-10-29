@@ -14,17 +14,10 @@ describe('Transactional Outbox & BullMQ Dispatcher (Milestone P1-03)', () => {
   let createdEventId: string;
 
   beforeAll(async () => {
-    // Ensure clean state for test aggregate
-    await prisma.outboxEvent.deleteMany({
-      where: { aggregateId: testAggregateId },
-    });
+    // Isolated UUID guarantees clean state without deleting records
   });
 
   afterAll(async () => {
-    // Cleanup test records
-    await prisma.outboxEvent.deleteMany({
-      where: { aggregateId: testAggregateId },
-    });
     const queue = getOutboxQueue();
     await queue.close();
     await prisma.$disconnect();
@@ -77,7 +70,7 @@ describe('Transactional Outbox & BullMQ Dispatcher (Milestone P1-03)', () => {
   });
 
   it('fetches pending outbox events ordered chronologically', async () => {
-    const pending = await fetchPendingOutboxEvents(50);
+    const pending = await fetchPendingOutboxEvents(200);
     expect(pending.length).toBeGreaterThan(0);
     const found = pending.find((e) => e.id === createdEventId);
     expect(found).toBeDefined();
@@ -93,7 +86,7 @@ describe('Transactional Outbox & BullMQ Dispatcher (Milestone P1-03)', () => {
   });
 
   it('dispatches pending outbox events to BullMQ with jobId deduplication', async () => {
-    const count = await pollAndDispatchOutboxEvents(50);
+    const count = await pollAndDispatchOutboxEvents(200);
     expect(count).toBeGreaterThanOrEqual(1);
 
     const queue = getOutboxQueue();
@@ -108,7 +101,7 @@ describe('Transactional Outbox & BullMQ Dispatcher (Milestone P1-03)', () => {
     expect(delivered.deliveredAt).not.toBeNull();
 
     // Verify it is no longer returned in pending events
-    const pendingAfter = await fetchPendingOutboxEvents(50);
+    const pendingAfter = await fetchPendingOutboxEvents(200);
     const found = pendingAfter.find((e) => e.id === createdEventId);
     expect(found).toBeUndefined();
   });

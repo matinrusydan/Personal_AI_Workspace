@@ -32,27 +32,7 @@ describe('Tasks & Projects Module (Milestone P2-01)', () => {
   });
 
   afterAll(async () => {
-    // Cleanup test records
-    await prisma.outboxEvent.deleteMany({
-      where: {
-        aggregateId: { in: [createdTaskId, createdSubtaskId].filter(Boolean) },
-      },
-    });
-    await prisma.taskTag.deleteMany({
-      where: { task: { ownerId: testOwnerId } },
-    });
-    await prisma.task.deleteMany({
-      where: { ownerId: testOwnerId },
-    });
-    await prisma.project.deleteMany({
-      where: { ownerId: testOwnerId },
-    });
-    await prisma.tag.deleteMany({
-      where: { ownerId: testOwnerId },
-    });
-    await prisma.user.deleteMany({
-      where: { id: testOwnerId },
-    });
+    await prisma.$disconnect();
   });
 
   describe('Projects Service', () => {
