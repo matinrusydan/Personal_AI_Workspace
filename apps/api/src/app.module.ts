@@ -8,6 +8,8 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { RecurrenceModule } from './modules/recurrence/recurrence.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { MeetingsModule } from './modules/meetings/meetings.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { MeetingsModule } from './modules/meetings/meetings.module';
     RecurrenceModule,
     CalendarModule,
     MeetingsModule,
+    RemindersModule,
+    TelegramModule,
   ],
 })
 export class AppModule {}

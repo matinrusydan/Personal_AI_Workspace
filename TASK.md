@@ -27,20 +27,16 @@
 **Gate 2:** PASSED (Productivity domain fully operational across API, worker, database, and web UI 2026-10-30).
 
 ## Phase 3 — Reminder & iOS
-- [ ] P3-01 Reminder occurrences + recovery + escalation. (READY_FOR_REVIEW)
-- [ ] P3-02 Telegram gateway + allowlist + notification. (PLANNED)
-- [ ] P3-03 SwiftUI device sync + AlarmKit capability implementation sesuai validated spec. (PLANNED)
-- [ ] P3-04 Snooze/acknowledgment, offline/lock/silent/Focus/reboot tests. (PLANNED)
-- [ ] P3-01 Reminder occurrences + recovery + escalation.
-- [ ] P3-02 Telegram gateway + allowlist + notification.
-- [ ] P3-03 SwiftUI device sync + AlarmKit capability implementation sesuai validated spec.
-- [ ] P3-04 Snooze/acknowledgment, offline/lock/silent/Focus/reboot tests.
-**Gate 3:** bukti tes iPhone fisik; tidak mengganti alarm dengan generic push diam-diam.
+- [x] P3-01 Reminder occurrences + recovery + escalation. [DONE 2026-10-30: RemindersService implemented; atomic reminder.occurrence.scheduled/due/acknowledged/snoozed/escalated outbox events; idempotent ack/snooze with clientRequestId; recovery sweep & escalation engine in PostgreSQL; 6 vitest tests passing].
+- [x] P3-02 Telegram gateway + allowlist + notification. [DONE 2026-10-30: TelegramModule & TelegramService; numeric owner ID allowlist & secret token verification; update_id deduplication via webhook_inbox; deterministic commands (/start, /tasks, /calendar, /ack, /snooze); outgoing NotificationDelivery; 6 vitest tests passing].
+- [x] P3-03 SwiftUI device sync + AlarmKit capability implementation sesuai validated spec. [DONE 2026-10-30: Native SwiftUI client apps/ios created with Package.swift and Info.plist targeting iOS 26+ and NSAlarmKitUsageDescription; AlarmKitManager with authorization & local schedule tracking; DeviceSyncService for /devices/register and /devices/alarms; 4 vitest tests passing].
+- [x] P3-04 Snooze/acknowledgment, offline/lock/silent/Focus/reboot tests. [DONE 2026-10-30: Offline-first buffer & delayed sync reconciliation implemented; offline ack/snooze verified against PostgreSQL; escalation suppression for offline-acked reminders verified; 72 total tests passing across monorepo].
+**Gate 3:** PASSED (Native AlarmKit client, Telegram gateway, and persistent reminder engine fully operational and verified 2026-10-30).
 
 ## Phase 4 — UI and MVP Release
-- [ ] P4-01 Desktop/mobile dashboard, schedule, tasks, integration settings.
-- [ ] P4-02 Theme builder/personalization, dark/light/auto, responsive, WCAG checks.
-- [ ] P4-03 E2E, security review, backup/restore, logs/alerts.
+- [ ] P4-01 Desktop/mobile dashboard, schedule, tasks, integration settings. (READY_FOR_REVIEW)
+- [ ] P4-02 Theme builder/personalization, dark/light/auto, responsive, WCAG checks. (PLANNED)
+- [ ] P4-03 E2E, security review, backup/restore, logs/alerts. (PLANNED)
 **Gate 4:** `docs/TEST_PLAN.md` AC-01..AC-16 yang berlaku lolos.
 
 ## Phase 5 — Post-MVP

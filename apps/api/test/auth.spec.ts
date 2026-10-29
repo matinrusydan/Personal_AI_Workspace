@@ -1,14 +1,35 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import { TotpService } from '../src/modules/auth/totp.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { DevicesService } from '../src/modules/devices/devices.service';
 import { AuditService } from '../src/modules/audit/audit.service';
+import { prisma } from '@paw/database';
 
 describe('Auth & Security Modules (Milestone P1-02)', () => {
   let totpService: TotpService;
   let auditService: AuditService;
   let authService: AuthService;
   let devicesService: DevicesService;
+
+  const defaultOwnerId = 'e1000000-0000-0000-0000-000000000001';
+
+  beforeAll(async () => {
+    // Ensure default owner exists in PostgreSQL for device foreign keys
+    await prisma.user.upsert({
+      where: { id: defaultOwnerId },
+      update: {},
+      create: {
+        id: defaultOwnerId,
+        email: 'default-owner-auth-test@example.com',
+        passwordHash: 'hash',
+        passwordSalt: 'salt',
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
 
   beforeEach(() => {
     totpService = new TotpService();
@@ -139,9 +160,9 @@ describe('Auth & Security Modules (Milestone P1-02)', () => {
   });
 
   describe('DevicesService (iPhone 12 & Desktop Device Enrollment)', () => {
-    it('registers new iOS device and updates lastSeenAt on re-registration', () => {
+    it('registers new iOS device and updates lastSeenAt on re-registration', async () => {
       const ownerId = 'e1000000-0000-0000-0000-000000000001';
-      const dev1 = devicesService.registerDevice(ownerId, {
+      const dev1 = await devicesService.registerDevice(ownerId, {
         platform: 'ios',
         installId: 'iphone-12-uuid-12345',
         deviceName: 'Matin iPhone 12',
@@ -152,7 +173,7 @@ describe('Auth & Security Modules (Milestone P1-02)', () => {
       expect(dev1.data.installId).toBe('iphone-12-uuid-12345');
 
       // Re-registering same installId must update record, not duplicate
-      const dev2 = devicesService.registerDevice(ownerId, {
+      const dev2 = await devicesService.registerDevice(ownerId, {
         platform: 'ios',
         installId: 'iphone-12-uuid-12345',
         deviceName: 'Matin iPhone 12 Updated',
@@ -162,8 +183,8 @@ describe('Auth & Security Modules (Milestone P1-02)', () => {
       expect(dev2.data.deviceName).toBe('Matin iPhone 12 Updated');
     });
 
-    it('returns desired alarm synchronization items', () => {
-      const alarms = devicesService.getDesiredAlarms('owner-id');
+    it('returns desired alarm synchronization items', async () => {
+      const alarms = await devicesService.getDesiredAlarms(defaultOwnerId);
       expect(Array.isArray(alarms.data)).toBe(true);
     });
   });

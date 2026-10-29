@@ -24,6 +24,8 @@ export const ServerEnvSchema = z.object({
 
   // Optional integrations (disabled by default in Phase 0/1)
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_OWNER_USER_ID: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   ZOOM_CLIENT_ID: z.string().optional(),
