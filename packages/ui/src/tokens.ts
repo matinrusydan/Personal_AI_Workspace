@@ -21,8 +21,10 @@ export interface ColorTokenGroup {
   focusRing: string;
 }
 
-export type ThemePreset = 'default' | 'forest' | 'ocean';
+export type ThemePreset = 'default' | 'forest' | 'ocean' | 'custom';
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeDensity = 'compact' | 'normal' | 'spacious';
+export type ThemeRadius = 'none' | 'sm' | 'md' | 'lg' | 'xl';
 
 export const lightTokens: ColorTokenGroup = {
   canvas: '#F8FAFC',
@@ -112,42 +114,50 @@ export const oceanDarkTokens: ColorTokenGroup = {
   focusRing: '#38BDF8',
 };
 
-export const themePresets: Record<ThemePreset, { light: ColorTokenGroup; dark: ColorTokenGroup }> =
-  {
-    default: { light: lightTokens, dark: darkTokens },
-    forest: { light: forestLightTokens, dark: forestDarkTokens },
-    ocean: { light: oceanLightTokens, dark: oceanDarkTokens },
-  };
+export const themePresets: Record<
+  Exclude<ThemePreset, 'custom'>,
+  { light: ColorTokenGroup; dark: ColorTokenGroup }
+> = {
+  default: { light: lightTokens, dark: darkTokens },
+  forest: { light: forestLightTokens, dark: forestDarkTokens },
+  ocean: { light: oceanLightTokens, dark: oceanDarkTokens },
+};
 
 export function resolveTokens(
   mode: 'light' | 'dark',
   preset: ThemePreset = 'default',
+  customOverrides?: Partial<ColorTokenGroup>,
 ): ColorTokenGroup {
-  const selectedPreset = themePresets[preset] || themePresets.default;
-  return mode === 'dark' ? selectedPreset.dark : selectedPreset.light;
+  let base: ColorTokenGroup;
+  if (preset === 'custom' && customOverrides) {
+    base =
+      mode === 'dark'
+        ? { ...darkTokens, ...customOverrides }
+        : { ...lightTokens, ...customOverrides };
+  } else {
+    const selectedPreset =
+      themePresets[preset as keyof typeof themePresets] || themePresets.default;
+    base = mode === 'dark' ? selectedPreset.dark : selectedPreset.light;
+  }
+  return base;
 }
 
-export const spacingTokens = {
-  0: '0px',
-  1: '0.25rem', // 4px
-  2: '0.5rem', // 8px
-  3: '0.75rem', // 12px
-  4: '1rem', // 16px
-  5: '1.25rem', // 20px
-  6: '1.5rem', // 24px
-  8: '2rem', // 32px
-  10: '2.5rem', // 40px
-  12: '3rem', // 48px
-} as const;
+export const densityPaddingMap: Record<
+  ThemeDensity,
+  { page: string; card: string; button: string }
+> = {
+  compact: { page: '0.75rem', card: '0.75rem', button: '0.375rem 0.75rem' },
+  normal: { page: '1.25rem', card: '1rem', button: '0.5rem 1rem' },
+  spacious: { page: '2rem', card: '1.5rem', button: '0.75rem 1.25rem' },
+};
 
-export const radiusTokens = {
+export const radiusTokens: Record<ThemeRadius, string> = {
   none: '0px',
   sm: '0.25rem', // 4px
   md: '0.375rem', // 6px
   lg: '0.5rem', // 8px
   xl: '0.75rem', // 12px
-  full: '9999px',
-} as const;
+};
 
 /**
  * Validates WCAG contrast ratio (simple helper for theme engine)
@@ -179,4 +189,30 @@ export function isWcagCompliant(
 ): boolean {
   const ratio = calculateContrastRatio(foregroundHex, backgroundHex);
   return ratio >= (isLargeText ? 3.0 : 4.5);
+}
+
+/**
+ * Creates custom theme with contrast correction
+ */
+export function deriveValidatedCustomTheme(
+  accentHex: string,
+  mode: 'light' | 'dark',
+): { tokens: ColorTokenGroup; adjusted: boolean } {
+  const base = mode === 'dark' ? { ...darkTokens } : { ...lightTokens };
+  let adjusted = false;
+
+  // Check if accent satisfies contrast against actionPrimaryForeground (white)
+  const contrastWithWhite = calculateContrastRatio('#FFFFFF', accentHex);
+  let effectiveAccent = accentHex;
+
+  if (contrastWithWhite < 3.0) {
+    // Darken accent for light mode or brighten for dark mode
+    effectiveAccent = mode === 'dark' ? '#3B82F6' : '#1D4ED8';
+    adjusted = true;
+  }
+
+  base.actionPrimary = effectiveAccent;
+  base.focusRing = effectiveAccent;
+
+  return { tokens: base, adjusted };
 }

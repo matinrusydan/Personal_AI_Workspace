@@ -60,6 +60,12 @@ describe('Transactional Outbox & BullMQ Dispatcher (Milestone P1-03)', () => {
 
     expect(createdEventId).toBeDefined();
 
+    // Ensure it is prioritized at top of chronological pending queue for test
+    await prisma.outboxEvent.update({
+      where: { id: createdEventId },
+      data: { createdAt: new Date('2020-01-01T00:00:00Z') },
+    });
+
     const stored = await prisma.outboxEvent.findUnique({
       where: { id: createdEventId },
     });

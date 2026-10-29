@@ -79,7 +79,7 @@ describe('Telegram Gateway & Allowlist Verification (Milestone P3-02)', () => {
     });
 
     it('deduplicates incoming updates by update_id', async () => {
-      const uniqueUpdateId = Math.floor(Date.now() / 1000) + 100;
+      const uniqueUpdateId = Math.floor(Math.random() * 800000000) + 1000000;
       const update: TelegramUpdate = {
         update_id: uniqueUpdateId,
         message: {
@@ -103,7 +103,7 @@ describe('Telegram Gateway & Allowlist Verification (Milestone P3-02)', () => {
 
   describe('Numeric Allowlist Enforcement (docs/SECURITY.md)', () => {
     it('rejects updates from unauthorized stranger user ID', async () => {
-      const uniqueUpdateId = Math.floor(Date.now() / 1000) + 200;
+      const uniqueUpdateId = Math.floor(Math.random() * 800000000) + 2000000;
       const update: TelegramUpdate = {
         update_id: uniqueUpdateId,
         message: {
@@ -120,7 +120,7 @@ describe('Telegram Gateway & Allowlist Verification (Milestone P3-02)', () => {
     });
 
     it('processes commands from authorized owner numeric ID', async () => {
-      const uniqueUpdateId = Math.floor(Date.now() / 1000) + 300;
+      const uniqueUpdateId = Math.floor(Math.random() * 800000000) + 3000000;
       const update: TelegramUpdate = {
         update_id: uniqueUpdateId,
         message: {
@@ -138,7 +138,7 @@ describe('Telegram Gateway & Allowlist Verification (Milestone P3-02)', () => {
     });
 
     it('responds to /tasks command with active tasks', async () => {
-      const uniqueUpdateId = Math.floor(Date.now() / 1000) + 400;
+      const uniqueUpdateId = Math.floor(Math.random() * 800000000) + 4000000;
       const update: TelegramUpdate = {
         update_id: uniqueUpdateId,
         message: {
