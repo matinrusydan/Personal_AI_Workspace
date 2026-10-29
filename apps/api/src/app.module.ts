@@ -10,6 +10,10 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { MeetingsModule } from './modules/meetings/meetings.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { AiModule } from './modules/ai/ai.module';
+import { AgentsModule } from './modules/agents/agents.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
 
 @Module({
   imports: [
@@ -24,6 +28,10 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     MeetingsModule,
     RemindersModule,
     TelegramModule,
+    ApprovalsModule,
+    AiModule,
+    AgentsModule,
+    WorkflowsModule,
   ],
 })
 export class AppModule {}
