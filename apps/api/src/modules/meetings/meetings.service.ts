@@ -266,4 +266,116 @@ export class MeetingsService {
       throw new BadRequestException(`Meeting provisioning failed: ${errorMsg}`);
     }
   }
+
+  async updateMeeting(
+    ownerId: string,
+    id: string,
+    dto: { title?: string; startsAt?: string; endsAt?: string; timezone?: string },
+    traceId?: string,
+  ) {
+    const meeting = await prisma.meeting.findFirst({
+      where: { id, ownerId },
+      include: { calendarEvent: true },
+    });
+
+    if (!meeting) {
+      throw new NotFoundException(`Meeting ${id} not found`);
+    }
+
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : undefined;
+    const endsAt = dto.endsAt ? new Date(dto.endsAt) : undefined;
+
+    if (startsAt && endsAt && startsAt >= endsAt) {
+      throw new BadRequestException('startsAt must be before endsAt');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      let calEvent = meeting.calendarEvent;
+      if (calEvent && (dto.title || startsAt || endsAt || dto.timezone)) {
+        calEvent = await tx.calendarEvent.update({
+          where: { id: calEvent.id },
+          data: {
+            title: dto.title ?? undefined,
+            startsAt: startsAt ?? undefined,
+            endsAt: endsAt ?? undefined,
+            timezone: dto.timezone ?? undefined,
+          },
+        });
+      }
+
+      await createOutboxEvent(tx, {
+        aggregateType: 'meeting',
+        aggregateId: id,
+        eventType: 'meeting.updated.v1',
+        payload: { id, ...dto },
+        traceId,
+      });
+
+      return { ...meeting, calendarEvent: calEvent };
+    });
+
+    return {
+      data: {
+        id: updated.id,
+        provider: updated.provider,
+        externalMeetingId: updated.externalMeetingId,
+        joinUrl: updated.joinUrl,
+        provisioningStatus: updated.provisioningStatus,
+        calendarEvent: updated.calendarEvent
+          ? {
+              id: updated.calendarEvent.id,
+              title: updated.calendarEvent.title,
+              startsAt: updated.calendarEvent.startsAt.toISOString(),
+              endsAt: updated.calendarEvent.endsAt.toISOString(),
+              timezone: updated.calendarEvent.timezone,
+            }
+          : null,
+      },
+    };
+  }
+
+  async deleteMeeting(ownerId: string, id: string, traceId?: string) {
+    const meeting = await prisma.meeting.findFirst({
+      where: { id, ownerId },
+      include: { calendarEvent: true },
+    });
+
+    if (!meeting) {
+      throw new NotFoundException(`Meeting ${id} not found`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (meeting.calendarEventId) {
+        await tx.calendarEvent.delete({
+          where: { id: meeting.calendarEventId },
+        });
+      }
+
+      await tx.meeting.delete({
+        where: { id },
+      });
+
+      await createOutboxEvent(tx, {
+        aggregateType: 'meeting',
+        aggregateId: id,
+        eventType: 'meeting.canceled.v1',
+        payload: {
+          meetingId: id,
+          provider: meeting.provider,
+          externalMeetingId: meeting.externalMeetingId,
+        },
+        traceId,
+      });
+    });
+
+    this.auditService.record({
+      actorType: 'user',
+      actorId: ownerId,
+      action: 'meeting.canceled',
+      target: id,
+      traceId,
+    });
+
+    return { success: true };
+  }
 }

@@ -9,6 +9,10 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
+    "dev:web": "pnpm --filter @paw/web dev",
+    "dev:api": "pnpm --filter @paw/api start",
+    "dev:worker": "pnpm --filter @paw/worker start",
+    "start:web": "pnpm --filter @paw/web start",
     "build": "pnpm -r run build",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",

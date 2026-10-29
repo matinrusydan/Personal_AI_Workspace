@@ -1,9 +1,50 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { devicesApi } from '@/lib/api';
 
 export function Header() {
+  const [deviceStatus, setDeviceStatus] = useState<string>('Connecting...');
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    async function enrollAndCheckDevices() {
+      try {
+        let installId = localStorage.getItem('paw_web_install_id');
+        if (!installId) {
+          installId = `web-client-${Math.random().toString(36).substring(2, 9)}`;
+          localStorage.setItem('paw_web_install_id', installId);
+        }
+
+        // Register this browser client into PostgreSQL devices table
+        await devicesApi.register({
+          platform: 'web',
+          installId,
+          deviceName: 'Web Desktop Browser',
+        });
+
+        // Query active devices in database
+        const res = await devicesApi.list();
+        const devices = res.data || [];
+        const iosDevice = devices.find((d: any) => d.platform === 'ios');
+
+        if (iosDevice) {
+          setDeviceStatus('iPhone 12: Enrolled & Ready');
+          setIsReady(true);
+        } else {
+          setDeviceStatus(`Web Device Connected (${devices.length} Active)`);
+          setIsReady(true);
+        }
+      } catch {
+        setDeviceStatus('Device Sync: Offline');
+        setIsReady(false);
+      }
+    }
+
+    enrollAndCheckDevices();
+  }, []);
+
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
       <div className="flex items-center gap-3">
@@ -86,10 +127,15 @@ export function Header() {
 
       <div className="flex items-center gap-4">
         {/* Device Sync Status Badge */}
-        <div className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-          <span className="h-2 w-2 rounded-full bg-success" />
-          <span className="hidden sm:inline">iPhone 12 Native Alarm:</span>
-          <span>Ready</span>
+        <div
+          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+            isReady
+              ? 'border-success/30 bg-success/10 text-success'
+              : 'border-border bg-surface-subtle text-text-muted'
+          }`}
+        >
+          <span className={`h-2 w-2 rounded-full ${isReady ? 'bg-success' : 'bg-text-muted'}`} />
+          <span>{deviceStatus}</span>
         </div>
 
         {/* User indicator */}

@@ -65,6 +65,77 @@ export class DevicesService {
     };
   }
 
+  async listDevices(ownerId: string) {
+    const devices = await prisma.device.findMany({
+      where: { ownerId },
+      orderBy: { lastSeenAt: 'desc' },
+    });
+
+    return {
+      data: devices.map((d) => ({
+        id: d.id,
+        platform: d.platform,
+        installId: d.installId,
+        deviceName: d.deviceName,
+        registeredAt: d.registeredAt.toISOString(),
+        lastSeenAt: d.lastSeenAt.toISOString(),
+      })),
+    };
+  }
+
+  async reportAlarmStatus(
+    ownerId: string,
+    occurrenceId: string,
+    dto: { platformAlarmId?: string; status: string; errorMessage?: string },
+    traceId?: string,
+  ) {
+    const occurrence = await prisma.reminderOccurrence.findFirst({
+      where: { id: occurrenceId, rule: { ownerId } },
+    });
+
+    if (!occurrence) {
+      throw new BadRequestException(`Reminder occurrence ${occurrenceId} not found`);
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { ownerId },
+    });
+
+    if (device) {
+      await prisma.deviceAlarm.upsert({
+        where: {
+          deviceId_occurrenceId: {
+            deviceId: device.id,
+            occurrenceId,
+          },
+        },
+        create: {
+          deviceId: device.id,
+          occurrenceId,
+          platformAlarmId: dto.platformAlarmId,
+          status: dto.status,
+          errorMessage: dto.errorMessage,
+        },
+        update: {
+          platformAlarmId: dto.platformAlarmId,
+          status: dto.status,
+          errorMessage: dto.errorMessage,
+        },
+      });
+    }
+
+    this.auditService.record({
+      actorType: 'device',
+      actorId: device?.id || 'unknown',
+      action: 'device.alarm.status_reported',
+      target: occurrenceId,
+      traceId,
+      metadata: { status: dto.status, platformAlarmId: dto.platformAlarmId },
+    });
+
+    return { success: true };
+  }
+
   async getDesiredAlarms(ownerId: string): Promise<{ data: DesiredAlarmItem[] }> {
     const occurrences = await prisma.reminderOccurrence.findMany({
       where: {

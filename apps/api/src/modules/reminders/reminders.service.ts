@@ -497,4 +497,51 @@ export class RemindersService {
 
     return { escalatedCount: escalated.length, escalatedIds: escalated };
   }
+
+  async deleteReminderRule(ownerId: string, ruleId: string, traceId?: string) {
+    const existing = await prisma.reminderRule.findFirst({
+      where: { id: ruleId, ownerId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Reminder rule ${ruleId} not found`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Cancel pending occurrences and device alarms
+      await tx.deviceAlarm.deleteMany({
+        where: { occurrence: { ruleId } },
+      });
+      await tx.alarmAcknowledgment.deleteMany({
+        where: { occurrence: { ruleId } },
+      });
+      await tx.notificationDelivery.deleteMany({
+        where: { occurrence: { ruleId } },
+      });
+      await tx.reminderOccurrence.deleteMany({
+        where: { ruleId },
+      });
+      await tx.reminderRule.delete({
+        where: { id: ruleId },
+      });
+
+      await createOutboxEvent(tx, {
+        aggregateType: 'reminder',
+        aggregateId: ruleId,
+        eventType: 'reminder.rule.deleted.v1',
+        payload: { ruleId },
+        traceId,
+      });
+    });
+
+    this.auditService.record({
+      actorType: 'user',
+      actorId: ownerId,
+      action: 'reminder.rule.deleted',
+      target: ruleId,
+      traceId,
+    });
+
+    return { success: true };
+  }
 }

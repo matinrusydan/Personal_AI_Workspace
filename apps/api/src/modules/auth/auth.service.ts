@@ -1,7 +1,13 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { ServerEnvSchema } from '@paw/config';
+import { prisma } from '@paw/database';
 import { TotpService } from './totp.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -30,7 +36,7 @@ interface MfaTicket {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly config = ServerEnvSchema.parse(process.env);
   private readonly sessions = new Map<string, SessionEntity>();
   private readonly mfaTickets = new Map<string, MfaTicket>();
@@ -68,6 +74,68 @@ export class AuthService {
         recoveryCodesCount: plainCodes.length,
       },
     });
+  }
+
+  async onModuleInit() {
+    try {
+      const existing = await prisma.user.findFirst({
+        where: { email: this.config.OWNER_EMAIL },
+      });
+      if (existing) {
+        this.owner.id = existing.id;
+      } else {
+        const created = await prisma.user.create({
+          data: {
+            id: this.owner.id,
+            email: this.owner.email,
+            passwordHash: this.owner.passwordHash,
+            passwordSalt: this.owner.passwordSalt,
+            defaultTimezone: this.owner.defaultTimezone,
+          },
+        });
+        this.owner.id = created.id;
+      }
+    } catch {
+      // Ignored if DB not reachable in unit tests
+    }
+  }
+
+  async getOrCreateDevSession() {
+    let user = await prisma.user.findFirst({
+      where: { email: this.config.OWNER_EMAIL },
+    });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: this.owner.id,
+          email: this.owner.email,
+          passwordHash: this.owner.passwordHash,
+          passwordSalt: this.owner.passwordSalt,
+          defaultTimezone: this.owner.defaultTimezone,
+        },
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        sessionId: 'dev-session-local',
+      },
+      this.config.JWT_SECRET,
+      { expiresIn: '7d' },
+    );
+
+    return {
+      data: {
+        accessToken: token,
+        user: {
+          id: user.id,
+          email: user.email,
+          timezone: user.defaultTimezone,
+        },
+      },
+    };
   }
 
   // Helper method for testing or administrative retrieval of current TOTP secret

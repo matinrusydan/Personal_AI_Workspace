@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -70,6 +71,15 @@ export class RemindersController {
       deviceId: body.deviceId,
     };
     return this.remindersService.snoozeOccurrence(req.user.userId, dto, traceId);
+  }
+
+  @Delete(':id')
+  async deleteReminderRule(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Headers('x-trace-id') traceId?: string,
+  ) {
+    return this.remindersService.deleteReminderRule(req.user.userId, id, traceId);
   }
 
   @Post('sweep')

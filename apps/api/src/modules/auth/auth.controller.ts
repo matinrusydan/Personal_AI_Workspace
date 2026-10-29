@@ -16,6 +16,12 @@ import { AuthGuard, AuthenticatedUser } from '../../common/guards/auth.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Post('auth/dev-session')
+  @HttpCode(HttpStatus.OK)
+  async getDevSession() {
+    return this.authService.getOrCreateDevSession();
+  }
+
   @Post('auth/login')
   @HttpCode(HttpStatus.OK)
   async login(

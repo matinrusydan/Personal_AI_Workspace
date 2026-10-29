@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { meetingsApi } from '@/lib/api';
 
 export interface MeetingItem {
   id: string;
@@ -12,74 +13,121 @@ export interface MeetingItem {
   status: 'provisioning' | 'confirmed' | 'failed';
   joinUrl?: string | null;
   externalMeetingId?: string | null;
+  calendarEvent?: {
+    id: string;
+    title: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+  } | null;
 }
 
-const initialMeetings: MeetingItem[] = [
-  {
-    id: 'meet-demo-1',
-    provider: 'google-meet',
-    title: 'Evaluasi Mingguan Proyek',
-    startsAt: '2026-11-05T09:00:00.000Z',
-    endsAt: '2026-11-05T10:00:00.000Z',
-    timezone: 'Asia/Jakarta',
-    status: 'confirmed',
-    joinUrl: 'https://meet.google.com/abc-defg-hij',
-    externalMeetingId: 'abc-defg-hij',
-  },
-  {
-    id: 'meet-demo-2',
-    provider: 'zoom',
-    title: 'Konsultasi Teknis & Code Review',
-    startsAt: '2026-11-05T13:30:00.000Z',
-    endsAt: '2026-11-05T14:30:00.000Z',
-    timezone: 'Asia/Jakarta',
-    status: 'confirmed',
-    joinUrl: 'https://zoom.us/j/8492049182',
-    externalMeetingId: '8492049182',
-  },
-];
-
 export default function MeetingsPage() {
-  const [meetings, setMeetings] = useState<MeetingItem[]>(initialMeetings);
+  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState<MeetingItem | null>(null);
+
   const [provider, setProvider] = useState<'google-meet' | 'zoom'>('google-meet');
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchMeetings = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await meetingsApi.list();
+      const mapped = (res.data || []).map((m: any) => ({
+        id: m.id,
+        provider: m.provider,
+        title: m.calendarEvent?.title || 'Video Meeting',
+        startsAt: m.calendarEvent?.startsAt || new Date().toISOString(),
+        endsAt: m.calendarEvent?.endsAt || new Date().toISOString(),
+        timezone: m.calendarEvent?.timezone || 'Asia/Jakarta',
+        status: m.provisioningStatus || m.status || 'confirmed',
+        joinUrl: m.joinUrl,
+        externalMeetingId: m.externalMeetingId,
+        calendarEvent: m.calendarEvent,
+      }));
+      setMeetings(mapped);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch meetings from database';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMeetings();
+  }, [fetchMeetings]);
+
+  const handleSaveMeeting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !startsAt || !endsAt) return;
+
+    setIsSubmitting(true);
+    try {
+      if (editingMeeting) {
+        await meetingsApi.update(editingMeeting.id, {
+          title: title.trim(),
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: new Date(endsAt).toISOString(),
+          timezone: 'Asia/Jakarta',
+        });
+      } else {
+        await meetingsApi.create({
+          provider,
+          title: title.trim(),
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: new Date(endsAt).toISOString(),
+          timezone: 'Asia/Jakarta',
+        });
+      }
+
+      setTitle('');
+      setStartsAt('');
+      setEndsAt('');
+      setEditingMeeting(null);
+      setIsDialogOpen(false);
+      await fetchMeetings();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to provision meeting';
+      alert(`Error: ${msg}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteMeeting = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel and delete this meeting?')) return;
+    try {
+      await meetingsApi.delete(id);
+      await fetchMeetings();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete meeting';
+      alert(`Error: ${msg}`);
+    }
+  };
+
+  const openEditModal = (meeting: MeetingItem) => {
+    setEditingMeeting(meeting);
+    setProvider(meeting.provider);
+    setTitle(meeting.title);
+    setStartsAt(meeting.startsAt.substring(0, 16));
+    setEndsAt(meeting.endsAt.substring(0, 16));
+    setIsDialogOpen(true);
+  };
 
   const filteredMeetings = meetings.filter((m) => {
     if (filterProvider === 'all') return true;
     return m.provider === filterProvider;
   });
-
-  const handleCreateMeeting = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title || !startsAt || !endsAt) return;
-
-    const newMeetingId = `meet-${Date.now()}`;
-    const generatedUrl =
-      provider === 'google-meet'
-        ? `https://meet.google.com/gmt-${Math.random().toString(36).substring(2, 6)}`
-        : `https://zoom.us/j/${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-
-    const newMeeting: MeetingItem = {
-      id: newMeetingId,
-      provider,
-      title,
-      startsAt: new Date(startsAt).toISOString(),
-      endsAt: new Date(endsAt).toISOString(),
-      timezone: 'Asia/Jakarta',
-      status: 'confirmed',
-      joinUrl: generatedUrl,
-    };
-
-    setMeetings((prev) => [newMeeting, ...prev]);
-    setTitle('');
-    setStartsAt('');
-    setEndsAt('');
-    setIsDialogOpen(false);
-  };
 
   return (
     <div className="space-y-6">
@@ -90,19 +138,38 @@ export default function MeetingsPage() {
             Meetings (Google Meet & Zoom)
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Provision video conferences with automatic calendar sync & reminder schedule (Phase 2
-            MVP)
+            Provision video conferences with automatic calendar sync & reminder schedule (PostgreSQL
+            16 Authoritative)
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => setIsDialogOpen(true)}
+          onClick={() => {
+            setEditingMeeting(null);
+            setTitle('');
+            setStartsAt('');
+            setEndsAt('');
+            setIsDialogOpen(true);
+          }}
           className="inline-flex h-10 items-center justify-center rounded-md bg-action-primary px-4 text-sm font-semibold text-action-foreground shadow-sm hover:bg-action-primary-hover transition-colors"
         >
           + Schedule Meeting
         </button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive flex items-center justify-between">
+          <span>Database connection notice: {error}</span>
+          <button
+            type="button"
+            onClick={fetchMeetings}
+            className="rounded bg-destructive/20 px-2 py-1 text-xs font-semibold hover:bg-destructive/30"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Provider Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3 shadow-sm">
@@ -135,74 +202,102 @@ export default function MeetingsPage() {
       </div>
 
       {/* Meetings List */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {filteredMeetings.map((meeting) => (
-          <div
-            key={meeting.id}
-            className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-sm hover:border-action-primary/40 transition-all"
-          >
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <span
-                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold border ${
-                    meeting.provider === 'google-meet'
-                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-                      : 'border-blue-500/30 bg-blue-500/10 text-blue-500'
-                  }`}
-                >
-                  {meeting.provider === 'google-meet' ? 'Google Meet' : 'Zoom'}
-                </span>
+      {loading ? (
+        <div className="flex h-48 items-center justify-center rounded-xl border border-border bg-surface text-sm text-text-muted">
+          Loading meetings from PostgreSQL database...
+        </div>
+      ) : filteredMeetings.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-surface p-12 text-center text-sm text-text-muted">
+          No meetings found in database. Click "+ Schedule Meeting" above to provision Google Meet
+          or Zoom.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {filteredMeetings.map((meeting) => (
+            <div
+              key={meeting.id}
+              className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-sm hover:border-action-primary/40 transition-all"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold border ${
+                      meeting.provider === 'google-meet'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
+                        : 'border-blue-500/30 bg-blue-500/10 text-blue-500'
+                    }`}
+                  >
+                    {meeting.provider === 'google-meet' ? 'Google Meet' : 'Zoom'}
+                  </span>
 
-                <span className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success border border-success/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                  {meeting.status}
-                </span>
-              </div>
-
-              <h3 className="mt-3 text-base font-semibold text-text-primary">{meeting.title}</h3>
-
-              <div className="mt-2 space-y-1 text-xs text-text-secondary">
-                <div>
-                  📅{' '}
-                  {new Date(meeting.startsAt).toLocaleString('id-ID', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}{' '}
-                  -{' '}
-                  {new Date(meeting.endsAt).toLocaleTimeString('id-ID', {
-                    timeStyle: 'short',
-                  })}
+                  <span className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success border border-success/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                    {meeting.status}
+                  </span>
                 </div>
-                <div className="text-[11px] text-text-muted">Timezone: {meeting.timezone}</div>
+
+                <h3 className="mt-3 text-base font-semibold text-text-primary">{meeting.title}</h3>
+
+                <div className="mt-2 space-y-1 text-xs text-text-secondary">
+                  <div>
+                    📅{' '}
+                    {new Date(meeting.startsAt).toLocaleString('id-ID', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}{' '}
+                    -{' '}
+                    {new Date(meeting.endsAt).toLocaleTimeString('id-ID', {
+                      timeStyle: 'short',
+                    })}
+                  </div>
+                  <div className="text-[11px] text-text-muted">Timezone: {meeting.timezone}</div>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-border-subtle flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 truncate">
+                  {meeting.joinUrl && (
+                    <a
+                      href={meeting.joinUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-8 items-center justify-center rounded-md bg-action-primary px-3 text-xs font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm transition-colors"
+                    >
+                      Join Meeting &rarr;
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(meeting)}
+                    className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-secondary hover:bg-surface-subtle"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMeeting(meeting.id)}
+                    className="rounded border border-border bg-surface px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
               </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            <div className="mt-5 pt-3 border-t border-border-subtle flex items-center justify-between">
-              <span className="text-xs text-text-muted font-mono truncate max-w-[180px]">
-                {meeting.joinUrl}
-              </span>
-
-              {meeting.joinUrl && (
-                <a
-                  href={meeting.joinUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-action-primary px-3 text-xs font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm transition-colors"
-                >
-                  Join Meeting &rarr;
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Modal Schedule Meeting */}
+      {/* Modal Schedule/Edit Meeting */}
       {isDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-lg font-bold text-text-primary">Schedule Video Conference</h3>
+              <h3 className="text-lg font-bold text-text-primary">
+                {editingMeeting ? 'Edit Meeting' : 'Schedule Video Conference'}
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsDialogOpen(false)}
@@ -212,37 +307,39 @@ export default function MeetingsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateMeeting} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  Provider *
-                </label>
-                <div className="mt-1 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setProvider('google-meet')}
-                    className={`flex h-11 items-center justify-center rounded-md border text-sm font-semibold transition-colors ${
-                      provider === 'google-meet'
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500'
-                        : 'border-border bg-surface-subtle text-text-secondary hover:bg-surface'
-                    }`}
-                  >
-                    Google Meet
-                  </button>
+            <form onSubmit={handleSaveMeeting} className="mt-4 space-y-4">
+              {!editingMeeting && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Provider *
+                  </label>
+                  <div className="mt-1 grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setProvider('google-meet')}
+                      className={`flex h-11 items-center justify-center rounded-md border text-sm font-semibold transition-colors ${
+                        provider === 'google-meet'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500'
+                          : 'border-border bg-surface-subtle text-text-secondary hover:bg-surface'
+                      }`}
+                    >
+                      Google Meet
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setProvider('zoom')}
-                    className={`flex h-11 items-center justify-center rounded-md border text-sm font-semibold transition-colors ${
-                      provider === 'zoom'
-                        ? 'border-blue-500 bg-blue-500/10 text-blue-500 ring-1 ring-blue-500'
-                        : 'border-border bg-surface-subtle text-text-secondary hover:bg-surface'
-                    }`}
-                  >
-                    Zoom Meeting
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setProvider('zoom')}
+                      className={`flex h-11 items-center justify-center rounded-md border text-sm font-semibold transition-colors ${
+                        provider === 'zoom'
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-500 ring-1 ring-blue-500'
+                          : 'border-border bg-surface-subtle text-text-secondary hover:bg-surface'
+                      }`}
+                    >
+                      Zoom Meeting
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -295,9 +392,14 @@ export default function MeetingsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-action-primary px-4 py-2 text-sm font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm"
+                  disabled={isSubmitting}
+                  className="rounded-md bg-action-primary px-4 py-2 text-sm font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm disabled:opacity-50"
                 >
-                  Provision Meeting
+                  {isSubmitting
+                    ? 'Provisioning...'
+                    : editingMeeting
+                      ? 'Update Meeting'
+                      : 'Provision Meeting'}
                 </button>
               </div>
             </form>

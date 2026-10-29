@@ -16,6 +16,7 @@ export interface TaskItem {
 interface TaskCardProps {
   task: TaskItem;
   onStatusChange?: (taskId: string, newStatus: TaskItem['status']) => void;
+  onEdit?: (task: TaskItem) => void;
   onDelete?: (taskId: string) => void;
 }
 
@@ -32,7 +33,7 @@ const priorityStyles: Record<TaskItem['priority'], { label: string; badge: strin
   },
 };
 
-export function TaskCard({ task, onStatusChange, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onStatusChange, onEdit, onDelete }: TaskCardProps) {
   const priorityInfo = priorityStyles[task.priority] || priorityStyles.normal;
 
   return (
@@ -82,13 +83,24 @@ export function TaskCard({ task, onStatusChange, onDelete }: TaskCardProps) {
             <select
               value={task.status}
               onChange={(e) => onStatusChange(task.id, e.target.value as TaskItem['status'])}
-              className="rounded border border-border bg-surface-subtle px-2 py-1 text-xs text-text-primary focus:border-action-primary focus:outline-none"
+              className="rounded border border-border bg-surface-subtle px-2 py-1 text-xs text-text-primary focus:border-action-primary focus:outline-none cursor-pointer"
             >
               <option value="todo">To Do</option>
               <option value="in_progress">In Progress</option>
               <option value="blocked">Blocked</option>
               <option value="done">Done</option>
             </select>
+          )}
+
+          {onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(task)}
+              className="rounded p-1 text-text-muted hover:bg-surface-subtle hover:text-text-primary transition-colors"
+              title="Edit task"
+            >
+              ✏️
+            </button>
           )}
 
           {onDelete && (
@@ -98,7 +110,7 @@ export function TaskCard({ task, onStatusChange, onDelete }: TaskCardProps) {
               className="rounded p-1 text-text-muted hover:bg-destructive/10 hover:text-destructive transition-colors"
               title="Delete task"
             >
-              ✕
+              🗑️
             </button>
           )}
         </div>

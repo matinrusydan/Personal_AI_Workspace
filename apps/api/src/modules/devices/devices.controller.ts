@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Body,
+  Param,
   UseGuards,
   Req,
   HttpCode,
@@ -16,6 +17,11 @@ import { AuthGuard, AuthenticatedUser } from '../../common/guards/auth.guard';
 @UseGuards(AuthGuard)
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
+
+  @Get()
+  async listDevices(@Req() req: { user: AuthenticatedUser }) {
+    return this.devicesService.listDevices(req.user.userId);
+  }
 
   @Post('register')
   @HttpCode(HttpStatus.OK)
@@ -35,5 +41,16 @@ export class DevicesController {
   @Get('alarms')
   async getDeviceAlarms(@Req() req: { user: AuthenticatedUser }) {
     return this.devicesService.getDesiredAlarms(req.user.userId);
+  }
+
+  @Post('alarms/:id/status')
+  @HttpCode(HttpStatus.OK)
+  async reportAlarmStatus(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Body() body: { platformAlarmId?: string; status: string; errorMessage?: string },
+    @Headers('x-trace-id') traceId?: string,
+  ) {
+    return this.devicesService.reportAlarmStatus(req.user.userId, id, body, traceId);
   }
 }
