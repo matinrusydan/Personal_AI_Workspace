@@ -1,0 +1,15 @@
+{
+  "name": "@paw/database",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PostgreSQL authoritative database schemas and migrations for Personal AI Workspace",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

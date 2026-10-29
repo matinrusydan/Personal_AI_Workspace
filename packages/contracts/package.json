@@ -1,0 +1,17 @@
+{
+  "name": "@paw/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Canonical OpenAPI contracts and generated TypeScript types for Personal AI Workspace",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "generate": "openapi-typescript src/openapi.yaml -o src/generated.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.1",
+    "typescript": "^5.7.3"
+  }
+}

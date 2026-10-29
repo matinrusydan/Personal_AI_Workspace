@@ -1,0 +1,682 @@
+openapi: 3.1.0
+info:
+  title: Personal AI Workspace API
+  version: 1.0.0
+  description: Canonical REST API contracts for Personal AI Workspace (P0 MVP)
+servers:
+  - url: /api/v1
+    description: Current API v1 endpoint
+paths:
+  /auth/login:
+    post:
+      summary: Begin owner authentication
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login step 1 response (requires MFA or establishes session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthStepResponse'
+
+  /auth/mfa/verify:
+    post:
+      summary: Finalize MFA authentication
+      operationId: verifyMfa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, code]
+              properties:
+                ticket:
+                  type: string
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Authenticated session established
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+
+  /auth/logout:
+    post:
+      summary: Revoke current session
+      operationId: logout
+      responses:
+        '204':
+          description: Session successfully revoked
+
+  /me:
+    get:
+      summary: Get owner profile and preferences
+      operationId: getMe
+      responses:
+        '200':
+          description: Owner profile information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+
+  /tasks:
+    get:
+      summary: List tasks
+      operationId: listTasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [todo, in_progress, blocked, done]
+        - name: projectId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+    post:
+      summary: Create task
+      operationId: createTask
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+
+  /tasks/{id}:
+    get:
+      summary: Get single task
+      operationId: getTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+    patch:
+      summary: Update task
+      operationId: updateTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+
+  /calendar/events:
+    get:
+      summary: List calendar events
+      operationId: listCalendarEvents
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of calendar events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CalendarEvent'
+    post:
+      summary: Create calendar event
+      operationId: createCalendarEvent
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCalendarEventRequest'
+      responses:
+        '201':
+          description: Calendar event created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CalendarEvent'
+
+  /meetings:
+    post:
+      summary: Provision external meeting (Google Meet or Zoom)
+      operationId: createMeeting
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMeetingRequest'
+      responses:
+        '202':
+          description: Meeting provisioning initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MeetingProvisioningStatus'
+
+  /meetings/{id}:
+    get:
+      summary: Get meeting details and join URL
+      operationId: getMeeting
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Meeting details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Meeting'
+
+  /reminders/{id}/acknowledge:
+    post:
+      summary: Acknowledge a reminder occurrence
+      operationId: acknowledgeReminder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [occurrenceId, clientRequestId, deviceId]
+              properties:
+                occurrenceId:
+                  type: string
+                  format: uuid
+                clientRequestId:
+                  type: string
+                  format: uuid
+                deviceId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Acknowledgment recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+
+  /reminders/{id}/snooze:
+    post:
+      summary: Snooze a reminder occurrence
+      operationId: snoozeReminder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [occurrenceId, clientRequestId, minutes]
+              properties:
+                occurrenceId:
+                  type: string
+                  format: uuid
+                clientRequestId:
+                  type: string
+                  format: uuid
+                minutes:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Snooze recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+
+  /devices/register:
+    post:
+      summary: Register mobile or desktop client device
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '200':
+          description: Device enrolled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Device'
+
+  /devices/alarms:
+    get:
+      summary: Get desired native alarm state delta for device
+      operationId: getDeviceAlarms
+      responses:
+        '200':
+          description: List of desired alarms to schedule locally
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DesiredAlarmItem'
+
+  /devices/alarms/{id}/status:
+    post:
+      summary: Report local on-device alarm scheduling outcome (AlarmKit)
+      operationId: reportAlarmStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                platformAlarmId:
+                  type: string
+                status:
+                  type: string
+                  enum: [scheduled, failed, permission_denied, canceled]
+                errorMessage:
+                  type: string
+      responses:
+        '200':
+          description: Alarm state updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+
+components:
+  schemas:
+    AuthStepResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            mfaRequired:
+              type: boolean
+            ticket:
+              type: string
+
+    SessionResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            expiresAt:
+              type: string
+              format: date-time
+
+    UserProfileResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            timezone:
+              type: string
+
+    Task:
+      type: object
+      required: [id, title, status, priority, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [todo, in_progress, blocked, done]
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: string
+          format: date-time
+          nullable: true
+        timezone:
+          type: string
+        version:
+          type: integer
+
+    CreateTaskRequest:
+      type: object
+      required: [title]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, blocked, done]
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+
+    CalendarEvent:
+      type: object
+      required: [id, title, startsAt, endsAt, timezone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        source:
+          type: string
+          enum: [local, google]
+        externalEventId:
+          type: string
+          nullable: true
+
+    CreateCalendarEventRequest:
+      type: object
+      required: [title, startsAt, endsAt, timezone]
+      properties:
+        title:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+
+    CreateMeetingRequest:
+      type: object
+      required: [provider, title, startsAt, endsAt, timezone]
+      properties:
+        provider:
+          type: string
+          enum: [google-meet, zoom]
+        title:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        calendarId:
+          type: string
+          format: uuid
+        reminderOffsetsMinutes:
+          type: array
+          items:
+            type: integer
+
+    MeetingProvisioningStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [provisioning, confirmed, failed]
+        joinUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    Meeting:
+      type: object
+      required: [id, provider, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [google-meet, zoom]
+        externalMeetingId:
+          type: string
+          nullable: true
+        joinUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          type: string
+          enum: [provisioning, confirmed, failed]
+
+    RegisterDeviceRequest:
+      type: object
+      required: [platform, installId]
+      properties:
+        platform:
+          type: string
+          enum: [ios, web, desktop_windows]
+        installId:
+          type: string
+        deviceName:
+          type: string
+
+    Device:
+      type: object
+      required: [id, platform, installId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        installId:
+          type: string
+
+    DesiredAlarmItem:
+      type: object
+      required: [occurrenceId, scheduledFor, title]
+      properties:
+        occurrenceId:
+          type: string
+          format: uuid
+        scheduledFor:
+          type: string
+          format: date-time
+        title:
+          type: string
+        version:
+          type: integer
+
+    GenericSuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean

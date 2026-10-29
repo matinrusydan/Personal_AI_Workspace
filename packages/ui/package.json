@@ -1,0 +1,15 @@
+{
+  "name": "@paw/ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Design tokens, semantic color ramps, and theme engine for Personal AI Workspace",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

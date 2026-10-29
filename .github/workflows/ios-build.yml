@@ -1,0 +1,33 @@
+name: iOS Native Alarm Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode toolchain
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build and package .ipa
+        run: |
+          mkdir -p apps/ios/build/Payload
+          echo "Headless iOS build pipeline ready. Xcode build invocation targets apps/ios when Swift source is scaffolded in Phase 3."
+          touch apps/ios/build/Payload/placeholder.txt
+          cd apps/ios/build
+          zip -r PersonalAIWorkspace.ipa Payload
+
+      - name: Upload .ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-ai-workspace-ios-ipa
+          path: apps/ios/build/PersonalAIWorkspace.ipa
+          retention-days: 7

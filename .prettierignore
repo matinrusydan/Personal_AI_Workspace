@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+pnpm-lock.yaml
+*.ipa
+Payload/
+DerivedData/
+
+# Ignore documentation baseline to preserve original markdown formatting & hashes
+*.md
+docs/**/*.md
+prompts/**/*.md
+templates/**/*.md
+packages/contracts/src/generated.ts
+
