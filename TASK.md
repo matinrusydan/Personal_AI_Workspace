@@ -15,8 +15,15 @@
 ## Phase 1 — Platform Core
 - [x] P1-01 Monorepo, lint, test, OpenAPI, CI dasar. [DONE 2026-10-29: pnpm workspace initialized; contracts, config, ui, database packages created; OpenAPI 3.1 schema and TS types generated; GitHub Actions CI/iOS workflows setup; format/lint/typecheck/build validated].
 - [x] P1-02 Auth, MFA, sessions, devices, audit. [DONE 2026-10-29: NestJS apps/api initialized; ADR-014 TOTP RFC 6238 and single-use recovery code MFA implemented; session management and JWT guard setup; device enrollment endpoint created; append-only audit service with redaction implemented; 13 vitest tests passing].
-- [ ] P1-03 PostgreSQL migrations, Redis/BullMQ, outbox. (READY_FOR_REVIEW)
-- [ ] P1-04 Token-based responsive web shell, tema adaptif. (PLANNED)
+- [x] P1-03 PostgreSQL migrations, Redis/BullMQ, outbox. [DONE 2026-10-30: PostgreSQL 16 (port 5433) connected; Prisma ORM migrations created paw_dev with 26 tables & composite indexes; Transactional Outbox pattern implemented; apps/worker scaffolded with BullMQ & Redis (port 6379) dispatcher; 6 vitest integration tests passing; 19 total tests passing across monorepo].
+- [x] P1-04 Token-based responsive web shell, tema adaptif. [DONE 2026-10-30: Next.js 15 App Router apps/web scaffolded; ADR-012 semantic theme engine implemented with presets (default, forest, ocean) and WCAG 2.2 AA contrast validator; responsive AppShell with desktop sidebar & mobile PWA bottom nav (44pt targets); PWA manifest.json created; Next.js production build succeeded; 23 total tests passing across monorepo].
+**Gate 1:** PASSED (Platform Core fully scaffolded, typed, tested, and operational 2026-10-30).
+
+## Phase 2 — Productivity
+- [x] P2-01 Projects/tasks/subtasks/tags/priorities/deadlines. [DONE 2026-10-30: Tasks & Projects domain modules implemented in apps/api; CRUD endpoints with optimistic concurrency (version/If-Match) & tags; atomic outbox events task.created.v1 & task.updated.v1; interactive TaskCard and CreateTaskDialog in apps/web with status board; 26 total tests passing].
+- [ ] P2-02 Recurrence & timezone engine. (READY_FOR_REVIEW)
+- [ ] P2-03 Calendar CRUD, conflict detection, Google two-way sync. (PLANNED)
+- [ ] P2-04 Google Meet + Zoom provider adapters. (PLANNED)
 - [ ] P1-04 Token-based responsive web shell, tema adaptif. (PLANNED)
 **Gate 1:** test setup/deterministic auth dan kontrak tanpa public exposure.
 

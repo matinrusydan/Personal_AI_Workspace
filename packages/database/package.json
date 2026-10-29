@@ -2,14 +2,22 @@
   "name": "@paw/database",
   "version": "1.0.0",
   "private": true,
-  "description": "PostgreSQL authoritative database schemas and migrations for Personal AI Workspace",
+  "description": "PostgreSQL authoritative database schemas, migrations, and Prisma client for Personal AI Workspace",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
+    "prisma": "^6.4.1",
     "typescript": "^5.7.3"
   }
 }

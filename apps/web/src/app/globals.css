@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default Light Mode Tokens */
+  --paw-color-bg-canvas: #f8fafc;
+  --paw-color-surface: #ffffff;
+  --paw-color-surface-subtle: #f1f5f9;
+  --paw-color-text-primary: #0f172a;
+  --paw-color-text-secondary: #475569;
+  --paw-color-text-muted: #94a3b8;
+  --paw-color-border: #e2e8f0;
+  --paw-color-border-subtle: #f1f5f9;
+  --paw-color-action-primary: #2563eb;
+  --paw-color-action-primary-hover: #1d4ed8;
+  --paw-color-action-primary-foreground: #ffffff;
+  --paw-color-destructive: #dc2626;
+  --paw-color-warning: #d97706;
+  --paw-color-success: #16a34a;
+  --paw-color-focus-ring: #3b82f6;
+
+  --paw-radius-sm: 0.25rem;
+  --paw-radius-md: 0.375rem;
+  --paw-radius-lg: 0.5rem;
+  --paw-radius-xl: 0.75rem;
+}
+
+[data-theme='dark'],
+:root.dark {
+  /* Default Dark Mode Tokens */
+  --paw-color-bg-canvas: #0b1220;
+  --paw-color-surface: #1e293b;
+  --paw-color-surface-subtle: #0f172a;
+  --paw-color-text-primary: #f1f5f9;
+  --paw-color-text-secondary: #cbd5e1;
+  --paw-color-text-muted: #64748b;
+  --paw-color-border: #334155;
+  --paw-color-border-subtle: #1e293b;
+  --paw-color-action-primary: #3b82f6;
+  --paw-color-action-primary-hover: #60a5fa;
+  --paw-color-action-primary-foreground: #ffffff;
+  --paw-color-destructive: #ef4444;
+  --paw-color-warning: #f59e0b;
+  --paw-color-success: #22c55e;
+  --paw-color-focus-ring: #60a5fa;
+}
+
+/* Forest Preset */
+[data-preset='forest'] {
+  --paw-color-bg-canvas: #f6faf7;
+  --paw-color-surface: #ffffff;
+  --paw-color-surface-subtle: #edf5ef;
+  --paw-color-text-primary: #14281d;
+  --paw-color-text-secondary: #3c5a48;
+  --paw-color-border: #d2e3d8;
+  --paw-color-action-primary: #1b8a5a;
+  --paw-color-action-primary-hover: #146e47;
+  --paw-color-focus-ring: #22c55e;
+}
+
+[data-theme='dark'][data-preset='forest'],
+:root.dark[data-preset='forest'] {
+  --paw-color-bg-canvas: #0b1a12;
+  --paw-color-surface: #152c20;
+  --paw-color-surface-subtle: #0f2117;
+  --paw-color-text-primary: #ecf5f0;
+  --paw-color-text-secondary: #a3c4b2;
+  --paw-color-border: #244533;
+  --paw-color-action-primary: #22c55e;
+  --paw-color-action-primary-hover: #4ade80;
+  --paw-color-focus-ring: #4ade80;
+}
+
+/* Ocean Preset */
+[data-preset='ocean'] {
+  --paw-color-bg-canvas: #f4fafc;
+  --paw-color-surface: #ffffff;
+  --paw-color-surface-subtle: #e8f5f8;
+  --paw-color-text-primary: #0c2738;
+  --paw-color-text-secondary: #34556b;
+  --paw-color-border: #cfe5ee;
+  --paw-color-action-primary: #0284c7;
+  --paw-color-action-primary-hover: #0369a1;
+  --paw-color-focus-ring: #38bdf8;
+}
+
+[data-theme='dark'][data-preset='ocean'],
+:root.dark[data-preset='ocean'] {
+  --paw-color-bg-canvas: #081724;
+  --paw-color-surface: #102a3e;
+  --paw-color-surface-subtle: #0b1e2d;
+  --paw-color-text-primary: #e8f4fb;
+  --paw-color-text-secondary: #9bc2db;
+  --paw-color-border: #1b3f5c;
+  --paw-color-action-primary: #0ea5e9;
+  --paw-color-action-primary-hover: #38bdf8;
+  --paw-color-focus-ring: #38bdf8;
+}
+
+body {
+  background-color: var(--paw-color-bg-canvas);
+  color: var(--paw-color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}

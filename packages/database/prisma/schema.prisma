@@ -1,0 +1,534 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// Identity & Authentication
+// -----------------------------------------------------------------------------
+
+model User {
+  id                  String               @id @default(uuid()) @db.Uuid
+  email               String               @unique
+  passwordHash        String               @map("password_hash")
+  passwordSalt        String               @map("password_salt")
+  locale              String               @default("id-ID")
+  defaultTimezone     String               @default("Asia/Jakarta") @map("default_timezone")
+  totpSecret          String?              @map("totp_secret")
+  recoveryCodeHashes  String[]             @default([]) @map("recovery_code_hashes")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  authenticators      Authenticator[]
+  sessions            Session[]
+  devices             Device[]
+  projects            Project[]
+  tasks               Task[]
+  tags                Tag[]
+  recurrenceRules     RecurrenceRule[]
+  calendars           Calendar[]
+  calendarEvents      CalendarEvent[]
+  meetings            Meeting[]
+  connectedAccounts   ConnectedAccount[]
+  reminderRules       ReminderRule[]
+  idempotencyKeys     IdempotencyKey[]
+  approvalRequests    ApprovalRequest[]
+  workflowDefinitions WorkflowDefinition[]
+  agentRuns           AgentRun[]
+
+  @@map("users")
+}
+
+model Authenticator {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  type          String
+  credentialRef String    @map("credential_ref")
+  verifiedAt    DateTime? @map("verified_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("authenticators")
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  deviceId   String?   @map("device_id") @db.Uuid
+  tokenHash  String?   @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Device {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  ownerId              String                 @map("owner_id") @db.Uuid
+  platform             String                 // ios, web, desktop_windows
+  installId            String                 @map("install_id")
+  deviceName           String?                @map("device_name")
+  registeredAt         DateTime               @default(now()) @map("registered_at")
+  lastSeenAt           DateTime               @default(now()) @map("last_seen_at")
+
+  owner                User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sessions             Session[]
+  pushTokens           PushToken[]
+  deviceAlarms         DeviceAlarm[]
+  alarmAcknowledgments AlarmAcknowledgment[]
+
+  @@unique([ownerId, installId])
+  @@map("devices")
+}
+
+model PushToken {
+  id              String    @id @default(uuid()) @db.Uuid
+  deviceId        String    @map("device_id") @db.Uuid
+  provider        String    // apns, webpush
+  tokenCiphertext String    @map("token_ciphertext")
+  revokedAt       DateTime? @map("revoked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  device          Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("push_tokens")
+}
+
+// -----------------------------------------------------------------------------
+// Tasks & Productivity
+// -----------------------------------------------------------------------------
+
+model Project {
+  id         String    @id @default(uuid()) @db.Uuid
+  ownerId    String    @map("owner_id") @db.Uuid
+  title      String
+  colorToken String?   @map("color_token")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+
+  @@index([ownerId, archivedAt])
+  @@map("projects")
+}
+
+model Task {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  projectId    String?   @map("project_id") @db.Uuid
+  parentTaskId String?   @map("parent_task_id") @db.Uuid
+  title        String
+  description  String?
+  priority     String    @default("normal") // low, normal, high, urgent
+  status       String    @default("todo")   // todo, in_progress, blocked, done
+  dueAt        DateTime? @map("due_at")
+  timezone     String?
+  version      Int       @default(1)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parentTask   Task?     @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subTasks     Task[]    @relation("SubTasks")
+  taskTags     TaskTag[]
+
+  @@index([ownerId, status, dueAt])
+  @@map("tasks")
+}
+
+model Tag {
+  id        String    @id @default(uuid()) @db.Uuid
+  ownerId   String    @map("owner_id") @db.Uuid
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskTags  TaskTag[]
+
+  @@unique([ownerId, name])
+  @@map("tags")
+}
+
+model TaskTag {
+  taskId String @map("task_id") @db.Uuid
+  tagId  String @map("tag_id") @db.Uuid
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@map("task_tags")
+}
+
+model RecurrenceRule {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  rrule       String
+  timezone    String
+  startsLocal DateTime  @map("starts_local")
+  endsAt      DateTime? @map("ends_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("recurrence_rules")
+}
+
+// -----------------------------------------------------------------------------
+// Calendar, Meetings & Integrations
+// -----------------------------------------------------------------------------
+
+model Calendar {
+  id                 String          @id @default(uuid()) @db.Uuid
+  ownerId            String          @map("owner_id") @db.Uuid
+  provider           String          // local, google
+  externalCalendarId String          @map("external_calendar_id")
+  syncStatus         String          @default("active") @map("sync_status")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  owner              User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  events             CalendarEvent[]
+
+  @@unique([ownerId, provider, externalCalendarId])
+  @@map("calendars")
+}
+
+model CalendarEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  calendarId      String    @map("calendar_id") @db.Uuid
+  source          String    @default("local") // local, google
+  externalEventId String?   @map("external_event_id")
+  etag            String?
+  title           String
+  startsAt        DateTime  @map("starts_at")
+  endsAt          DateTime  @map("ends_at")
+  timezone        String
+  status          String    @default("confirmed")
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  calendar        Calendar  @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  meetings        Meeting[]
+
+  @@unique([calendarId, externalEventId])
+  @@index([ownerId, startsAt, endsAt])
+  @@map("calendar_events")
+}
+
+model Meeting {
+  id                 String         @id @default(uuid()) @db.Uuid
+  ownerId            String         @map("owner_id") @db.Uuid
+  calendarEventId    String?        @map("calendar_event_id") @db.Uuid
+  provider           String         // google-meet, zoom
+  externalMeetingId  String?        @map("external_meeting_id")
+  joinUrl            String?        @map("join_url")
+  provisioningStatus String         @default("provisioning") @map("provisioning_status") // provisioning, confirmed, failed
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  owner              User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  calendarEvent      CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalMeetingId])
+  @@map("meetings")
+}
+
+model ConnectedAccount {
+  id                     String        @id @default(uuid()) @db.Uuid
+  ownerId                String        @map("owner_id") @db.Uuid
+  provider               String        // google, zoom, telegram
+  externalSubject        String        @map("external_subject")
+  refreshTokenCiphertext String        @map("refresh_token_ciphertext")
+  scopes                 String[]      @default([])
+  expiresAt              DateTime?     @map("expires_at")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  owner                  User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  syncCursors            SyncCursor[]
+
+  @@unique([ownerId, provider, externalSubject])
+  @@map("connected_accounts")
+}
+
+model SyncCursor {
+  id              String           @id @default(uuid()) @db.Uuid
+  accountId       String           @map("account_id") @db.Uuid
+  resourceId      String           @map("resource_id")
+  tokenCiphertext String           @map("token_ciphertext")
+  status          String           @default("valid") // valid, expired, invalid
+  lastSuccessAt   DateTime?        @map("last_success_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  account         ConnectedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("sync_cursors")
+}
+
+// -----------------------------------------------------------------------------
+// Reminders & Native iOS Alarms
+// -----------------------------------------------------------------------------
+
+model ReminderRule {
+  id            String               @id @default(uuid()) @db.Uuid
+  ownerId       String               @map("owner_id") @db.Uuid
+  sourceType    String               @map("source_type") // task, calendar_event
+  sourceId      String               @map("source_id")
+  offsetMinutes Int                  @map("offset_minutes")
+  channelPolicy String               @default("default") @map("channel_policy")
+  enabled       Boolean              @default(true)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  owner         User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  occurrences   ReminderOccurrence[]
+
+  @@map("reminder_rules")
+}
+
+model ReminderOccurrence {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  ruleId                 String                 @map("rule_id") @db.Uuid
+  occurrenceKey          String                 @map("occurrence_key")
+  scheduledFor           DateTime               @map("scheduled_for")
+  status                 String                 @default("scheduled") // scheduled, fired, acknowledged, snoozed, canceled
+  attemptVersion         Int                    @default(1) @map("attempt_version")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  rule                   ReminderRule           @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  deviceAlarms           DeviceAlarm[]
+  alarmAcknowledgments   AlarmAcknowledgment[]
+  notificationDeliveries NotificationDelivery[]
+
+  @@unique([ruleId, occurrenceKey])
+  @@index([status, scheduledFor])
+  @@map("reminder_occurrences")
+}
+
+model DeviceAlarm {
+  id              String             @id @default(uuid()) @db.Uuid
+  deviceId        String             @map("device_id") @db.Uuid
+  occurrenceId    String             @map("occurrence_id") @db.Uuid
+  platformAlarmId String?            @map("platform_alarm_id")
+  requestVersion  Int                @default(1) @map("request_version")
+  status          String             @default("pending") // pending, scheduled, failed, canceled
+  errorMessage    String?            @map("error_message")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  device          Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  occurrence      ReminderOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, occurrenceId])
+  @@map("device_alarms")
+}
+
+model AlarmAcknowledgment {
+  id              String             @id @default(uuid()) @db.Uuid
+  occurrenceId    String             @map("occurrence_id") @db.Uuid
+  actorDeviceId   String             @map("actor_device_id") @db.Uuid
+  action          String             // acknowledge, snooze
+  actedAt         DateTime           @map("acted_at")
+  clientRequestId String             @unique @map("client_request_id")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  occurrence      ReminderOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  actorDevice     Device             @relation(fields: [actorDeviceId], references: [id], onDelete: Cascade)
+
+  @@map("alarm_acknowledgments")
+}
+
+model NotificationDelivery {
+  id                String             @id @default(uuid()) @db.Uuid
+  occurrenceId      String             @map("occurrence_id") @db.Uuid
+  channel           String             // telegram, webpush
+  recipientRef      String             @map("recipient_ref")
+  status            String             @default("pending") // pending, sent, failed
+  providerMessageId String?            @map("provider_message_id")
+  attemptCount      Int                @default(0) @map("attempt_count")
+  lastError         String?            @map("last_error")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  occurrence        ReminderOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@map("notification_deliveries")
+}
+
+// -----------------------------------------------------------------------------
+// Outbox & Reliability
+// -----------------------------------------------------------------------------
+
+model WebhookInbox {
+  id               String    @id @default(uuid()) @db.Uuid
+  provider         String    // google, zoom, telegram
+  externalEventKey String    @map("external_event_key")
+  payload          Json?
+  receivedAt       DateTime  @default(now()) @map("received_at")
+  handledAt        DateTime? @map("handled_at")
+
+  @@unique([provider, externalEventKey])
+  @@map("webhook_inbox")
+}
+
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id")
+  eventType     String    @map("event_type")
+  payload       Json
+  traceId       String?   @map("trace_id")
+  retryCount    Int       @default(0) @map("retry_count")
+  maxRetries    Int       @default(5) @map("max_retries")
+  lastErrorLog  String?   @map("last_error_log")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  deliveredAt   DateTime? @map("delivered_at")
+
+  @@index([deliveredAt, createdAt])
+  @@map("outbox_events")
+}
+
+model IdempotencyKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  method      String
+  keyHash     String    @map("key_hash")
+  requestHash String?   @map("request_hash")
+  responseRef Json?     @map("response_ref")
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, method, keyHash])
+  @@map("idempotency_keys")
+}
+
+// -----------------------------------------------------------------------------
+// Governance & Auditing
+// -----------------------------------------------------------------------------
+
+model ApprovalRequest {
+  id          String            @id @default(uuid()) @db.Uuid
+  ownerId     String            @map("owner_id") @db.Uuid
+  action      String
+  payloadHash String            @map("payload_hash")
+  payload     Json
+  status      String            @default("pending") // pending, approved, rejected, expired
+  expiresAt   DateTime          @map("expires_at")
+  actorId     String            @map("actor_id")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  owner       User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  decision    ApprovalDecision?
+
+  @@map("approval_requests")
+}
+
+model ApprovalDecision {
+  id        String          @id @default(uuid()) @db.Uuid
+  requestId String          @unique @map("request_id") @db.Uuid
+  deciderId String          @map("decider_id")
+  decision  String          // approved, rejected
+  decidedAt DateTime        @default(now()) @map("decided_at")
+
+  request   ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("approval_decisions")
+}
+
+model AuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  actorType        String   @map("actor_type") // user, system, device
+  actorId          String   @map("actor_id")
+  action           String
+  target           String?
+  traceId          String   @map("trace_id")
+  redactedMetadata Json     @map("redacted_metadata")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// Extensibility & Future AI Agents (P1)
+// -----------------------------------------------------------------------------
+
+model WorkflowDefinition {
+  id        String        @id @default(uuid()) @db.Uuid
+  ownerId   String        @map("owner_id") @db.Uuid
+  revision  Int           @default(1)
+  graphJson Json          @map("graph_json")
+  status    String        @default("draft")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runs      WorkflowRun[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowRun {
+  id           String             @id @default(uuid()) @db.Uuid
+  definitionId String             @map("definition_id") @db.Uuid
+  revision     Int
+  status       String             @default("pending")
+  traceId      String?            @map("trace_id")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  completedAt  DateTime?          @map("completed_at")
+
+  definition   WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_runs")
+}
+
+model AgentRun {
+  id           String           @id @default(uuid()) @db.Uuid
+  ownerId      String           @map("owner_id") @db.Uuid
+  kind         String           // coding, assistant
+  status       String           @default("pending")
+  model        String
+  costEstimate Float?           @map("cost_estimate")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+
+  owner        User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  invocations  ToolInvocation[]
+
+  @@map("agent_runs")
+}
+
+model ToolInvocation {
+  id           String    @id @default(uuid()) @db.Uuid
+  runId        String    @map("run_id") @db.Uuid
+  toolName     String    @map("tool_name")
+  proposalId   String?   @map("proposal_id")
+  status       String    @default("pending")
+  outputDigest String?   @map("output_digest")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  agentRun     AgentRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@map("tool_invocations")
+}

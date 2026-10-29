@@ -1,6 +1,6 @@
 /**
  * Semantic Design Tokens according to W3C Design Tokens format
- * Defined in docs/DESIGN_SYSTEM.md
+ * Defined in docs/DESIGN_SYSTEM.md & ADR-012
  */
 
 export interface ColorTokenGroup {
@@ -20,6 +20,9 @@ export interface ColorTokenGroup {
   success: string;
   focusRing: string;
 }
+
+export type ThemePreset = 'default' | 'forest' | 'ocean';
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 export const lightTokens: ColorTokenGroup = {
   canvas: '#F8FAFC',
@@ -56,6 +59,73 @@ export const darkTokens: ColorTokenGroup = {
   success: '#22C55E',
   focusRing: '#60A5FA',
 };
+
+export const forestLightTokens: ColorTokenGroup = {
+  ...lightTokens,
+  canvas: '#F6FAF7',
+  surface: '#FFFFFF',
+  surfaceSubtle: '#EDF5EF',
+  textPrimary: '#14281D',
+  textSecondary: '#3C5A48',
+  border: '#D2E3D8',
+  actionPrimary: '#1B8A5A',
+  actionPrimaryHover: '#146E47',
+  focusRing: '#22C55E',
+};
+
+export const forestDarkTokens: ColorTokenGroup = {
+  ...darkTokens,
+  canvas: '#0B1A12',
+  surface: '#152C20',
+  surfaceSubtle: '#0F2117',
+  textPrimary: '#ECF5F0',
+  textSecondary: '#A3C4B2',
+  border: '#244533',
+  actionPrimary: '#22C55E',
+  actionPrimaryHover: '#4ADE80',
+  focusRing: '#4ADE80',
+};
+
+export const oceanLightTokens: ColorTokenGroup = {
+  ...lightTokens,
+  canvas: '#F4FAFC',
+  surface: '#FFFFFF',
+  surfaceSubtle: '#E8F5F8',
+  textPrimary: '#0C2738',
+  textSecondary: '#34556B',
+  border: '#CFE5EE',
+  actionPrimary: '#0284C7',
+  actionPrimaryHover: '#0369A1',
+  focusRing: '#38BDF8',
+};
+
+export const oceanDarkTokens: ColorTokenGroup = {
+  ...darkTokens,
+  canvas: '#081724',
+  surface: '#102A3E',
+  surfaceSubtle: '#0B1E2D',
+  textPrimary: '#E8F4FB',
+  textSecondary: '#9BC2DB',
+  border: '#1B3F5C',
+  actionPrimary: '#0EA5E9',
+  actionPrimaryHover: '#38BDF8',
+  focusRing: '#38BDF8',
+};
+
+export const themePresets: Record<ThemePreset, { light: ColorTokenGroup; dark: ColorTokenGroup }> =
+  {
+    default: { light: lightTokens, dark: darkTokens },
+    forest: { light: forestLightTokens, dark: forestDarkTokens },
+    ocean: { light: oceanLightTokens, dark: oceanDarkTokens },
+  };
+
+export function resolveTokens(
+  mode: 'light' | 'dark',
+  preset: ThemePreset = 'default',
+): ColorTokenGroup {
+  const selectedPreset = themePresets[preset] || themePresets.default;
+  return mode === 'dark' ? selectedPreset.dark : selectedPreset.light;
+}
 
 export const spacingTokens = {
   0: '0px',
@@ -97,4 +167,16 @@ export function calculateContrastRatio(foregroundHex: string, backgroundHex: str
   const brightest = Math.max(l1, l2);
   const darkest = Math.min(l1, l2);
   return (brightest + 0.05) / (darkest + 0.05);
+}
+
+/**
+ * Checks if a color pairing satisfies WCAG 2.2 AA (>= 4.5 for normal text, >= 3.0 for large text/UI)
+ */
+export function isWcagCompliant(
+  foregroundHex: string,
+  backgroundHex: string,
+  isLargeText = false,
+): boolean {
+  const ratio = calculateContrastRatio(foregroundHex, backgroundHex);
+  return ratio >= (isLargeText ? 3.0 : 4.5);
 }

@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 1. Project Identity & Operating Mode
 - **Project:** Personal AI Workspace (Single-user, future-ready multi-user schema).
-- **Status:** APPROVED DESIGN BASELINE / SPECIFICATION PACK v1.0.
-- **CURRENT OPERATING MODE:** **PLANNING ONLY (Phase 0 — Feasibility & Architecture Validation)**.
-- **STRICT PROHIBITION:** Do NOT execute commands that modify state, scaffold source applications, install dependencies, run migrations, connect live external provider APIs, or deploy infrastructure until explicit owner approval is granted for a specific milestone.
+- **Status:** APPROVED DESIGN BASELINE & PHASE 1 PLATFORM CORE COMPLETED.
+- **CURRENT OPERATING MODE:** Phase 1 Completed. Entering Phase 2 (Productivity: Tasks, Recurrence, Google Calendar Sync, Google Meet & Zoom).
+- **STRICT PROHIBITION:** Do NOT execute commands that modify production infrastructure or live external accounts until explicit owner approval is granted for each specific milestone.
 - **Role:** You act as **Principal Architect + Tech Lead + Security Reviewer**, not an autonomous unconstrained operator. Follow `AGENTS.md` as cross-agent rules.
 
 ## 2. Common & Development Commands
@@ -75,6 +75,7 @@ Commands under the `paw` CLI syntax (`paw <resource> <action> [flags]`) document
 - Begin each response with a concise summary of repo state and locked decisions.
 - Strictly distinguish `FACT VERIFIED`, `ASSUMPTION`, `PROPOSAL`, `UNRESOLVED`, and `BLOCKED`.
 - Design **one phase per iteration**, resolving the approval gate before progressing.
+- **Mandatory Git Push Rule:** Every time a Phase (or Gate) is officially completed and passes all verification tests, all changes must be committed with a descriptive message and pushed to the remote GitHub repository before proceeding to the next phase.
 - Consult official documentation for volatile APIs (Claude Code flags, Apple AlarmKit, Google Workspace, Zoom APIs); do not invent flags or endpoint parameters.
 - Preserve approved ADRs; major architectural changes require a new ADR via `templates/ADR_TEMPLATE.md`.
 - Windows development does not substitute for macOS/Xcode physical device testing. Validate hardware, Apple developer account, and iOS target requirements before native implementation.
