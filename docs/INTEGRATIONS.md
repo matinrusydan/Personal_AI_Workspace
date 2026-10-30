@@ -1,5 +1,11 @@
 # INTEGRATIONS.md — Provider Adapter Contracts
 
+## Current implementation status (2026-10-30)
+- Google/Zoom connect, callback, token lifecycle, and verified-account status: **NOT_IMPLEMENTED**. The meeting adapters fail closed. Environment credentials alone cannot enable them; provider registration and owner consent are additional requirements after implementation.
+- Telegram has local webhook/command logic, but outgoing delivery is not implemented as a verified Bot API request. A database delivery row is not proof that a message was sent. Pairing and live bot tests remain required.
+- Settings intentionally leaves connection controls unavailable and status unverified. Local custom meeting links do not establish any provider connection.
+- The sections below describe required contracts, not evidence of completed external integrations.
+
 ## Provider design principles
 Each external adapter exposes capabilities, OAuth connect/disconnect, health, rate-limit handling, mapping, reconciliation and structured errors. Backend is owner of secrets; no client gets refresh token. Default disabled until configured and tested. Use fake adapters in test.
 

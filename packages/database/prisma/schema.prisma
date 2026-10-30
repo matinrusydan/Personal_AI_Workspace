@@ -34,6 +34,8 @@ model User {
   calendarEvents      CalendarEvent[]
   meetings            Meeting[]
   connectedAccounts   ConnectedAccount[]
+  oauthTransactions   OAuthTransaction[]
+  telegramPairingChallenges TelegramPairingChallenge[]
   reminderRules       ReminderRule[]
   idempotencyKeys     IdempotencyKey[]
   approvalRequests    ApprovalRequest[]
@@ -67,6 +69,8 @@ model Session {
 
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   device     Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  oauthTransactions OAuthTransaction[]
+  telegramPairingChallenges TelegramPairingChallenge[]
 
   @@index([userId, expiresAt])
   @@map("sessions")
@@ -255,7 +259,19 @@ model ConnectedAccount {
   ownerId                String        @map("owner_id") @db.Uuid
   provider               String        // google, zoom, telegram
   externalSubject        String        @map("external_subject")
-  refreshTokenCiphertext String        @map("refresh_token_ciphertext")
+  displayName            String?       @map("display_name")
+  email                  String?
+  username               String?
+  status                 String        @default("CONNECTED") // CONNECTED, EXPIRED, DISCONNECTED, ERROR
+  lastVerifiedAt         DateTime?     @map("last_verified_at")
+  lastTestedAt           DateTime?     @map("last_tested_at")
+  lastErrorCode          String?       @map("last_error_code")
+  tokenVersion           Int           @default(0) @map("token_version")
+  accessTokenCiphertext  String?       @map("access_token_ciphertext")
+  refreshTokenCiphertext String?       @map("refresh_token_ciphertext")
+  telegramBotId          String?       @map("telegram_bot_id")
+  telegramUserId         String?       @map("telegram_user_id")
+  telegramChatId         String?       @map("telegram_chat_id")
   scopes                 String[]      @default([])
   expiresAt              DateTime?     @map("expires_at")
   createdAt              DateTime      @default(now()) @map("created_at")
@@ -265,7 +281,62 @@ model ConnectedAccount {
   syncCursors            SyncCursor[]
 
   @@unique([ownerId, provider, externalSubject])
+  @@index([ownerId, provider])
   @@map("connected_accounts")
+}
+
+model OAuthTransaction {
+  id                 String    @id @default(uuid()) @db.Uuid
+  ownerId            String    @map("owner_id") @db.Uuid
+  sessionId          String    @map("session_id") @db.Uuid
+  provider           String    // google, zoom
+  stateHash          String    @map("state_hash")
+  bindingHash        String    @map("binding_hash")
+  redirectUri        String    @map("redirect_uri")
+  codeCiphertext     String?   @map("code_ciphertext")
+  verifierCiphertext String?   @map("verifier_ciphertext")
+  status             String    @default("PENDING") // PENDING, STAGED, COMPLETED, EXPIRED, CANCELED
+  expiresAt          DateTime  @map("expires_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  consumedAt         DateTime? @map("consumed_at")
+
+  owner              User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  session            Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, stateHash])
+  @@index([ownerId, status])
+  @@index([expiresAt])
+  @@map("oauth_transactions")
+}
+
+model TelegramPairingChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  ownerId    String    @map("owner_id") @db.Uuid
+  sessionId  String    @map("session_id") @db.Uuid
+  botId      String    @map("bot_id")
+  tokenHash  String    @unique @map("token_hash")
+  manualCode String    @map("manual_code")
+  status     String    @default("PENDING") // PENDING, PAIRED, EXPIRED, CANCELED
+  expiresAt  DateTime  @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  consumedAt DateTime? @map("consumed_at")
+
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, status])
+  @@index([expiresAt])
+  @@map("telegram_pairing_challenges")
+}
+
+model TelegramBotState {
+  botId          String    @id @map("bot_id")
+  nextOffset     BigInt    @default(0) @map("next_offset")
+  leaseOwner     String?   @map("lease_owner")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("telegram_bot_states")
 }
 
 model SyncCursor {

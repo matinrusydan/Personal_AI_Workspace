@@ -1,10 +1,12 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { prisma, createOutboxEvent, Prisma } from '@paw/database';
 import { ServerEnvSchema } from '@paw/config';
+import { createHash } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { RemindersService } from '../reminders/reminders.service';
+import { TelegramBotClient } from './telegram-bot.client';
 
 export interface TelegramUpdate {
   update_id: number;
@@ -26,10 +28,13 @@ export interface TelegramUpdate {
 }
 
 @Injectable()
-export class TelegramService {
+export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly config = ServerEnvSchema.parse(process.env);
+  private readonly botClient: TelegramBotClient;
   private allowedUserId: string;
   private webhookSecret: string;
+  private isPolling = false;
+  private pollingOffset = 0;
 
   constructor(
     private readonly auditService: AuditService,
@@ -39,6 +44,70 @@ export class TelegramService {
   ) {
     this.allowedUserId = this.config.TELEGRAM_OWNER_USER_ID || '123456789';
     this.webhookSecret = this.config.TELEGRAM_WEBHOOK_SECRET || 'paw-telegram-secret';
+    this.botClient = new TelegramBotClient(this.config.TELEGRAM_BOT_TOKEN);
+  }
+
+  async onModuleInit() {
+    if (this.botClient.isConfigured() && process.env.NODE_ENV !== 'test') {
+      this.startPolling();
+    }
+  }
+
+  onModuleDestroy() {
+    this.isPolling = false;
+  }
+
+  async startPolling() {
+    if (this.isPolling) return;
+    this.isPolling = true;
+
+    try {
+      const webhookInfo = await this.botClient.getWebhookInfo();
+      if (webhookInfo.url) {
+        console.log(`[Telegram] Menghapus webhook (${webhookInfo.url}) agar polling lokal dapat berjalan...`);
+        await this.botClient.deleteWebhook();
+      }
+    } catch (err: unknown) {
+      console.warn('[Telegram] Cek webhook info warning:', err instanceof Error ? err.message : err);
+    }
+
+    console.log('[Telegram] Polling lokal aktif untuk menerima pesan bot...');
+    this.pollLoop();
+  }
+
+  private async pollLoop() {
+    while (this.isPolling) {
+      try {
+        const updates = await this.botClient.getUpdates(this.pollingOffset, 3);
+        for (const update of updates) {
+          if (update.update_id >= this.pollingOffset) {
+            this.pollingOffset = update.update_id + 1;
+          }
+          await this.processIncomingUpdate(update);
+        }
+      } catch (err: unknown) {
+        // Sleep on network error before retrying
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
+  }
+
+  private async processIncomingUpdate(update: TelegramUpdate) {
+    if (!update || !update.message) return;
+
+    try {
+      const res = await this.handleWebhookUpdate(update, this.webhookSecret);
+      if (res && res.reply && update.message.chat?.id) {
+        // Send reply directly back to Telegram chat!
+        await this.botClient.sendMessage(update.message.chat.id, res.reply);
+      }
+    } catch (err: unknown) {
+      console.error('[Telegram] Gagal memproses update:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  getBotClient() {
+    return this.botClient;
   }
 
   // Testing helper to configure allowed sender
@@ -102,14 +171,17 @@ export class TelegramService {
       },
     });
 
-    // 3. Sender allowlist validation
+    // 3. Sender allowlist validation (allow pairing command /start pair_ to proceed)
     const message = update.message;
     if (!message || !message.from) {
       return { status: 'ignored_no_message' };
     }
 
+    const text = message.text?.trim() || '';
+    const isPairingAttempt = text.startsWith('/start pair_');
+
     const senderId = message.from.id;
-    if (!this.isSenderAllowed(senderId)) {
+    if (!isPairingAttempt && !this.isSenderAllowed(senderId)) {
       this.auditService.record({
         actorType: 'user',
         actorId: String(senderId),
@@ -121,8 +193,7 @@ export class TelegramService {
     }
 
     // 4. Dispatch deterministic command
-    const text = message.text?.trim() || '';
-    const responseText = await this.dispatchCommand(text, traceId);
+    const responseText = await this.dispatchCommand(text, message, traceId);
 
     return {
       status: 'processed',
@@ -134,9 +205,65 @@ export class TelegramService {
   /**
    * Deterministic command parser
    */
-  async dispatchCommand(text: string, _traceId?: string): Promise<string> {
+  async dispatchCommand(text: string, message?: TelegramUpdate['message'], _traceId?: string): Promise<string> {
     const parts = text.split(/\s+/);
     const command = parts[0]?.toLowerCase() || '';
+
+    // Handle pairing command
+    if (command === '/start' && parts[1]?.startsWith('pair_') && message) {
+      if (message.chat.type !== 'private') {
+        return '❌ Pairing hanya dapat dilakukan melalui pesan pribadi (private chat) dengan bot.';
+      }
+      if (this.config.TELEGRAM_OWNER_USER_ID && String(message.from?.id) !== String(this.config.TELEGRAM_OWNER_USER_ID)) {
+        return `⛔ Akses ditolak: ID Telegram Anda (${message.from?.id}) tidak cocok dengan TELEGRAM_OWNER_USER_ID (${this.config.TELEGRAM_OWNER_USER_ID}) di file .env.`;
+      }
+
+      const tokenHash = `telegram_pair:${createHash('sha256').update(parts[1]).digest('hex')}`;
+      const challenge = await prisma.telegramPairingChallenge.findUnique({
+        where: { tokenHash },
+      });
+
+      if (!challenge || challenge.status !== 'PENDING' || challenge.expiresAt <= new Date()) {
+        return '❌ Kode pairing tidak valid atau telah kedaluwarsa. Silakan buat kode pairing baru di menu Settings.';
+      }
+
+      await prisma.telegramPairingChallenge.update({
+        where: { id: challenge.id },
+        data: { status: 'PAIRED', consumedAt: new Date() },
+      });
+
+      await prisma.connectedAccount.upsert({
+        where: {
+          ownerId_provider_externalSubject: {
+            ownerId: challenge.ownerId,
+            provider: 'telegram',
+            externalSubject: String(message.from?.id),
+          },
+        },
+        create: {
+          ownerId: challenge.ownerId,
+          provider: 'telegram',
+          externalSubject: String(message.from?.id),
+          telegramUserId: String(message.from?.id),
+          telegramChatId: String(message.chat.id),
+          displayName: message.from?.username || message.from?.first_name || 'Telegram User',
+          username: message.from?.username,
+          status: 'CONNECTED',
+          lastVerifiedAt: new Date(),
+        },
+        update: {
+          telegramUserId: String(message.from?.id),
+          telegramChatId: String(message.chat.id),
+          displayName: message.from?.username || message.from?.first_name || 'Telegram User',
+          username: message.from?.username,
+          status: 'CONNECTED',
+          lastVerifiedAt: new Date(),
+          lastErrorCode: null,
+        },
+      });
+
+      return '✅ Berhasil! Akun Telegram Anda telah terpasang resmi dengan Personal AI Workspace.';
+    }
 
     // Find default owner
     const owner = await prisma.user.findFirst({
@@ -227,10 +354,28 @@ export class TelegramService {
     text: string;
     traceId?: string;
   }) {
-    const providerMessageId = `tg_msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    let providerMessageId = `tg_msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-    // In production with live token, executes:
-    // fetch(`https://api.telegram.org/bot${this.config.TELEGRAM_BOT_TOKEN}/sendMessage`, { ... })
+    if (this.botClient.isConfigured()) {
+      try {
+        const sent = await this.botClient.sendMessage(params.recipientChatId, params.text);
+        providerMessageId = String(sent.message_id);
+      } catch (err: unknown) {
+        if (params.occurrenceId) {
+          await prisma.notificationDelivery.create({
+            data: {
+              occurrenceId: params.occurrenceId,
+              channel: 'telegram',
+              recipientRef: params.recipientChatId,
+              status: 'failed',
+              lastError: err instanceof Error ? err.message : String(err),
+              attemptCount: 1,
+            },
+          });
+        }
+        throw err;
+      }
+    }
 
     if (params.occurrenceId) {
       await prisma.notificationDelivery.create({

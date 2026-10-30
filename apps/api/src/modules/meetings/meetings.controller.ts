@@ -44,7 +44,7 @@ export class MeetingsController {
   async updateMeeting(
     @Req() req: { user: AuthenticatedUser },
     @Param('id') id: string,
-    @Body() body: { title?: string; startsAt?: string; endsAt?: string; timezone?: string },
+    @Body() body: { title?: string; startsAt?: string; endsAt?: string; timezone?: string; joinUrl?: string },
     @Headers('x-trace-id') traceId?: string,
   ) {
     return this.meetingsService.updateMeeting(req.user.userId, id, body, traceId);

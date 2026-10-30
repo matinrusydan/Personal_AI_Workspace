@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { calendarApi } from '@/lib/api';
@@ -239,7 +239,7 @@ export default function CalendarPage() {
                       </span>
                       {event.hasMeeting && (
                         <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
-                          📹 Video Call
+                          Video Call
                         </span>
                       )}
                     </div>
@@ -262,14 +262,14 @@ export default function CalendarPage() {
                       onClick={() => openEditModal(event)}
                       className="rounded border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-surface-subtle transition-colors"
                     >
-                      ✏️ Edit
+                      Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteEvent(event.id)}
                       className="rounded border border-border bg-surface px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
                     >
-                      🗑️ Cancel
+                      Cancel
                     </button>
                   </div>
                 </div>
@@ -291,9 +291,7 @@ export default function CalendarPage() {
                 type="button"
                 onClick={() => setIsDialogOpen(false)}
                 className="rounded p-1 text-text-muted hover:text-text-primary"
-              >
-                ✕
-              </button>
+              ></button>
             </div>
 
             <form onSubmit={handleSaveEvent} className="mt-4 space-y-4">

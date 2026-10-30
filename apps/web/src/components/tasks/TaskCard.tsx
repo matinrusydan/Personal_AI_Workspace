@@ -69,8 +69,8 @@ export function TaskCard({ task, onStatusChange, onEdit, onDelete }: TaskCardPro
       <div className="mt-4 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-text-muted">
         <div>
           {task.dueAt ? (
-            <span className="flex items-center gap-1 text-[11px]">
-              📅{' '}
+            <span className="text-[11px]">
+              Due:{' '}
               {new Date(task.dueAt).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })}
             </span>
           ) : (
@@ -96,10 +96,9 @@ export function TaskCard({ task, onStatusChange, onEdit, onDelete }: TaskCardPro
             <button
               type="button"
               onClick={() => onEdit(task)}
-              className="rounded p-1 text-text-muted hover:bg-surface-subtle hover:text-text-primary transition-colors"
-              title="Edit task"
+              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:bg-surface-subtle transition-colors"
             >
-              ✏️
+              Edit
             </button>
           )}
 
@@ -107,10 +106,9 @@ export function TaskCard({ task, onStatusChange, onEdit, onDelete }: TaskCardPro
             <button
               type="button"
               onClick={() => onDelete(task.id)}
-              className="rounded p-1 text-text-muted hover:bg-destructive/10 hover:text-destructive transition-colors"
-              title="Delete task"
+              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
             >
-              🗑️
+              Delete
             </button>
           )}
         </div>

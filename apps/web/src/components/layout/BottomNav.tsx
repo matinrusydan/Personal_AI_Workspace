@@ -4,30 +4,35 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const mobileNavItems = [
+const items = [
   { label: 'Overview', href: '/' },
   { label: 'Calendar', href: '/calendar' },
   { label: 'Tasks', href: '/tasks' },
   { label: 'Meetings', href: '/meetings' },
+  { label: 'Reminders', href: '/reminders' },
   { label: 'Settings', href: '/settings' },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden shadow-lg">
-      {mobileNavItems.map((item) => {
-        const isActive = pathname === item.href;
+    <nav
+      aria-label="Mobile workspace"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+    >
+      {items.map((item) => {
+        const current =
+          item.href === '/'
+            ? pathname === '/'
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`flex flex-col items-center justify-center min-w-[64px] min-h-[44px] px-2 py-1 text-xs font-medium transition-colors ${
-              isActive ? 'text-action-primary font-bold' : 'text-text-muted hover:text-text-primary'
-            }`}
+            aria-current={current ? 'page' : undefined}
+            className={`flex min-h-touch items-center justify-center rounded-md px-2 py-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-focusRing ${current ? 'font-semibold text-action-primary' : 'font-medium text-text-secondary hover:text-text-primary'}`}
           >
-            <span>{item.label}</span>
+            {item.label}
           </Link>
         );
       })}

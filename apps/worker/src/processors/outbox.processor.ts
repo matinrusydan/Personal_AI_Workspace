@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { getRedisConnection } from '../connection';
 import { markOutboxEventDelivered, recordOutboxEventFailure } from '@paw/database';
+import { handleDomainEvent } from '../handlers/domain-handlers';
 
 export interface OutboxJobData {
   outboxId: string;
@@ -23,8 +24,8 @@ export function createOutboxWorker() {
       );
 
       try {
-        // In subsequent milestones, this routes to domain handlers
-        // (calendar sync, reminder dispatcher, notification delivery)
+        // Execute domain side effects (lifecycle reconciliation, device alarms, cancellations)
+        await handleDomainEvent(job.data);
 
         // Mark event as delivered in PostgreSQL authoritative store
         await markOutboxEventDelivered(outboxId);

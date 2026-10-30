@@ -1,111 +1,71 @@
-/**
- * Client-Side API Helper connecting apps/web to apps/api on http://127.0.0.1:4000/api/v1
- * All CRUD mutations query and mutate PostgreSQL 16 directly via REST API.
- */
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4000/api/v1';
-
-let cachedToken: string | null = null;
-
-export async function getValidAuthToken(): Promise<string | null> {
-  if (cachedToken) return cachedToken;
-
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem('paw_access_token');
-      if (stored) {
-        cachedToken = stored;
-        return stored;
-      }
-    } catch {
-      // Ignore localStorage restrictions
-    }
-
-    // In local development, automatically bootstrap dev session if no token is stored
-    try {
-      const resp = await fetch(`${API_BASE}/auth/dev-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (resp.ok) {
-        const json = await resp.json();
-        const token = json.data?.accessToken;
-        if (token) {
-          cachedToken = token;
-          try {
-            localStorage.setItem('paw_access_token', token);
-          } catch {
-            // Ignore
-          }
-          return token;
-        }
-      }
-    } catch {
-      // Backend might be starting
-    }
+/** Browser requests use the same-origin BFF and HttpOnly cookies only. */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
   }
-
-  return null;
 }
 
 export async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-
-  const token = await getValidAuthToken();
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (path.startsWith('//') || path.includes('://')) throw new Error('Invalid API endpoint');
+  const headers = new Headers(options.headers);
+  headers.set('Content-Type', 'application/json');
+  headers.delete('Authorization');
+  const response = await fetch(`/api${path}`, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
   if (!response.ok) {
-    let errorMsg = `API request failed with status ${response.status}`;
+    let message = `Request failed (${response.status})`;
     try {
-      const errJson = await response.json();
-      errorMsg = errJson.error?.message || errJson.message || errorMsg;
-    } catch {
-      // Ignore
+      const payload = await response.json();
+      const detail = payload.error?.message || payload.message;
+      if (typeof detail === 'string') message = detail;
+    } catch { /* A non-JSON failure must still expose the HTTP status. */ }
+    if (response.status === 401 && !path.startsWith('/auth/') && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('paw:unauthorized'));
     }
-    throw new Error(errorMsg);
+    throw new ApiError(message, response.status);
   }
-
-  if (response.status === 204) {
-    return {} as T;
-  }
-
-  return response.json();
+  return response.status === 204 ? ({} as T) : response.json();
 }
 
-// Auth API
+export interface AuthChallenge {
+  mfaRequired: true;
+  enrollmentRequired: boolean;
+  ticket: string;
+  expiresIn: number;
+  secret?: string;
+  provisioningUri?: string;
+}
+export interface AuthProfile {
+  id: string;
+  email: string;
+  timezone: string;
+  defaultTimezone: string;
+  locale: string;
+}
+export interface AuthSettings {
+  profile: AuthProfile;
+  sessions: { id: string; createdAt: string; expiresAt: string; deviceId: string | null; current: boolean }[];
+  activeSessionsCount: number;
+  mfa: { enabled: boolean; authenticatorsCount: number; recoveryCodesRemaining: number };
+}
+export interface AuthCompletion { expiresAt: string; recoveryCodes?: string[] }
+
 export const authApi = {
-  getDevSession: () =>
-    apiRequest<{ data: { accessToken: string; user: { id: string; email: string } } }>(
-      '/auth/dev-session',
-      {
-        method: 'POST',
-      },
-    ),
-  login: (email: string, passwordPlain: string) =>
-    apiRequest<{ data: { mfaRequired: boolean; ticket: string } }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password: passwordPlain }),
-    }),
+  setup: (email: string, password: string, setupToken: string) =>
+    apiRequest<{ data: AuthChallenge }>('/auth/setup', { method: 'POST', body: JSON.stringify({ email, password, setupToken }) }),
+  login: (email: string, password: string) =>
+    apiRequest<{ data: AuthChallenge }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   verifyMfa: (ticket: string, code: string) =>
-    apiRequest<{ data: { accessToken: string; expiresAt: string } }>('/auth/mfa/verify', {
-      method: 'POST',
-      body: JSON.stringify({ ticket, code }),
-    }),
+    apiRequest<{ data: AuthCompletion }>('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ ticket, code }) }),
+  verifyEnrollment: (ticket: string, code: string) =>
+    apiRequest<{ data: AuthCompletion }>('/auth/mfa/enroll/verify', { method: 'POST', body: JSON.stringify({ ticket, code }) }),
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
-  getMe: () => apiRequest<{ data: { id: string; email: string; timezone: string } }>('/me'),
+  getMe: () => apiRequest<{ data: AuthProfile }>('/me'),
+  settings: () => apiRequest<{ data: AuthSettings }>('/auth/settings'),
+  updateProfile: (data: { timezone?: string; locale?: string }) =>
+    apiRequest<{ data: AuthProfile }>('/auth/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+  revokeSession: (id: string) => apiRequest<{ success: boolean }>(`/auth/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // Tasks API (Full CRUD)
@@ -199,10 +159,17 @@ export const meetingsApi = {
     startsAt: string;
     endsAt: string;
     timezone?: string;
+    joinUrl?: string;
   }) => apiRequest<{ data: any }>('/meetings', { method: 'POST', body: JSON.stringify(data) }),
   update: (
     id: string,
-    data: { title?: string; startsAt?: string; endsAt?: string; timezone?: string },
+    data: {
+      title?: string;
+      startsAt?: string;
+      endsAt?: string;
+      timezone?: string;
+      joinUrl?: string;
+    },
   ) =>
     apiRequest<{ data: any }>(`/meetings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiRequest<{ success: boolean }>(`/meetings/${id}`, { method: 'DELETE' }),
@@ -250,6 +217,70 @@ export const devicesApi = {
     }),
 };
 
+// Integrations API
+export type IntegrationProvider = 'google' | 'zoom' | 'telegram';
+export type IntegrationStatusType =
+  | 'NOT_CONFIGURED'
+  | 'DISCONNECTED'
+  | 'CONNECTED'
+  | 'EXPIRED'
+  | 'ERROR';
+
+export interface IntegrationAccount {
+  displayName?: string | null;
+  email?: string | null;
+  username?: string | null;
+}
+
+export interface IntegrationStatusItem {
+  provider: IntegrationProvider;
+  status: IntegrationStatusType;
+  account?: IntegrationAccount | null;
+  lastVerifiedAt?: string | null;
+  lastTestedAt?: string | null;
+  error?: {
+    code: string;
+    message: string;
+    retryable?: boolean;
+  } | null;
+  configGuidance?: string | null;
+}
+
+export const integrationsApi = {
+  list: () => apiRequest<{ data: IntegrationStatusItem[] }>('/integrations'),
+  get: (provider: string) => apiRequest<{ data: IntegrationStatusItem }>(`/integrations/${provider}`),
+  startConnect: (provider: 'google' | 'zoom') =>
+    apiRequest<{ data: { authorizationUrl: string } }>(`/integrations/${provider}/connect`, {
+      method: 'POST',
+    }),
+  test: (provider: string) =>
+    apiRequest<{ data: { success: boolean; message: string; verifiedAt: string } }>(
+      `/integrations/${provider}/test`,
+      { method: 'POST' },
+    ),
+  disconnect: (provider: string) =>
+    apiRequest<{ success: boolean }>(`/integrations/${provider}`, { method: 'DELETE' }),
+  createTelegramPairing: () =>
+    apiRequest<{
+      data: {
+        challengeId: string;
+        manualCode: string;
+        deepLink: string;
+        expiresAt: string;
+        botUsername: string;
+      };
+    }>('/integrations/telegram/pairings', { method: 'POST' }),
+  getTelegramPairingStatus: (challengeId: string) =>
+    apiRequest<{ data: { status: 'pending' | 'paired' | 'expired' | 'canceled'; account?: IntegrationAccount } }>(
+      `/integrations/telegram/pairings/${encodeURIComponent(challengeId)}`,
+    ),
+  cancelTelegramPairing: (challengeId: string) =>
+    apiRequest<{ success: boolean }>(
+      `/integrations/telegram/pairings/${encodeURIComponent(challengeId)}`,
+      { method: 'DELETE' },
+    ),
+};
+
 // Stats API
 export const statsApi = {
   overview: () =>
@@ -269,3 +300,4 @@ export const statsApi = {
       };
     }>('/stats/overview'),
 };
+

@@ -1,5 +1,5 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { randomUUID } from 'crypto';
 
 @Catch()
@@ -7,7 +7,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
 
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -26,11 +25,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = (respObj['message'] as string) || message;
       code = (respObj['error'] as string) || HttpStatus[status] || 'ERROR';
       details = respObj;
-    } else if (exception instanceof Error) {
-      message = exception.message;
     }
 
-    const traceId = (request.headers['x-trace-id'] as string) || randomUUID();
+    // Unexpected database/crypto errors may contain SQL arguments or credentials.
+    if (status >= 500) {
+      message = 'Internal server error';
+      code = 'INTERNAL_ERROR';
+      details = {};
+    }
+
+    const traceId = randomUUID();
 
     response.status(status).json({
       error: {

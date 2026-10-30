@@ -3,6 +3,13 @@
 ## Decision
 Native iPhone alarm from MVP (P0) is locked by owner. Apple **AlarmKit** framework supports prominent alarms, one-time/repeating schedules and snooze on supported iOS versions. Apple sample states alarms can override Focus and silent mode when needed. **Not equivalent to an unconditional guarantee on every device/version**. Verify supported OS version and current Apple API docs before coding. Sources in `REFERENCES.md`.
 
+## Current verification status (2026-10-30)
+- The checked-in iOS code defaults to a loopback address (`http://127.0.0.1:4000/api/v1`), which does not reach the development computer from an iPhone.
+- `ContentView` contains demo alarms and simulated authorization; AlarmKit calls are not live on a physical device.
+- Native login, token storage, and verified pairing are not implemented.
+- The checked-in GitHub Actions workflow packages a placeholder text file, not an application IPA.
+- Sideloading and native physical-device verification remain a separate milestone (**BLOCKED_PHYSICAL**); accessing the workspace through iPhone Safari does not provide native alarms.
+
 ## Mandatory Phase 0 spike / go-no-go
 1. Validate exact supported iOS deployment target and actual available iPhone OS version(s); identify whether older devices require explicit unsupported status/fallback.
 2. Confirm distribution method (local development/TestFlight/App Store, Apple Developer account) and build/signing with macOS/Xcode. Windows cannot perform standard native iOS compilation/signing in isolation.

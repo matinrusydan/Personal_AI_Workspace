@@ -15,6 +15,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { StatsModule } from './modules/stats/stats.module';
     AgentsModule,
     WorkflowsModule,
     StatsModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}

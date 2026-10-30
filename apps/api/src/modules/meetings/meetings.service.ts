@@ -7,6 +7,10 @@ import {
   GoogleMeetAdapter,
   ZoomMeetingAdapter,
 } from './adapters/meeting-provider.adapter';
+import {
+  validateMeetingTitle, validateMeetingTimezone, validateMeetingInstant,
+  validateMeetingRange, validateMeetingJoinUrl, meetingLinkProvenance,
+} from './meeting-validation';
 
 export interface CreateMeetingRequestDto {
   provider: MeetingProviderType;
@@ -16,6 +20,7 @@ export interface CreateMeetingRequestDto {
   timezone?: string;
   calendarId?: string;
   reminderOffsetsMinutes?: number[];
+  joinUrl?: string;
 }
 
 @Injectable()
@@ -52,6 +57,7 @@ export class MeetingsService {
         provider: m.provider,
         externalMeetingId: m.externalMeetingId,
         joinUrl: m.joinUrl,
+        linkProvenance: meetingLinkProvenance(m),
         provisioningStatus: m.provisioningStatus,
         calendarEvent: m.calendarEvent
           ? {
@@ -85,6 +91,7 @@ export class MeetingsService {
         provider: meeting.provider,
         externalMeetingId: meeting.externalMeetingId,
         joinUrl: meeting.joinUrl,
+        linkProvenance: meetingLinkProvenance(meeting),
         provisioningStatus: meeting.provisioningStatus,
         calendarEvent: meeting.calendarEvent
           ? {
@@ -101,7 +108,9 @@ export class MeetingsService {
   }
 
   /**
-   * Initiates meeting creation via Asynchronous Provisioning State Machine (docs/INTEGRATIONS.md)
+   * Initiates meeting creation via Asynchronous Provisioning State Machine (docs/INTEGRATIONS.md).
+   * Custom HTTPS links are saved locally with null external ID and separate link events;
+   * their legacy 'confirmed' storage status does not assert provider verification.
    * 1. Creates Meeting record with status: 'provisioning'
    * 2. Atomically creates CalendarEvent & emits 'meeting.provisioning.requested.v1'
    * 3. Executes provider adapter to provision meeting
@@ -109,19 +118,20 @@ export class MeetingsService {
    * 5. Emits 'meeting.provisioning.confirmed.v1'
    */
   async createMeeting(ownerId: string, dto: CreateMeetingRequestDto, traceId?: string) {
-    const startsAt = new Date(dto.startsAt);
-    const endsAt = new Date(dto.endsAt);
-
-    if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime()) || startsAt >= endsAt) {
-      throw new BadRequestException('Valid startsAt and endsAt (startsAt < endsAt) are required');
-    }
-
+    const title = validateMeetingTitle(dto.title);
+    const startsAt = validateMeetingInstant(dto.startsAt);
+    const endsAt = validateMeetingInstant(dto.endsAt);
+    validateMeetingRange(startsAt, endsAt);
+    const timezone = validateMeetingTimezone(dto.timezone === undefined ? 'Asia/Jakarta' : dto.timezone);
+    const customJoinUrl = dto.joinUrl === undefined ? undefined : validateMeetingJoinUrl(dto.joinUrl);
     const adapter = this.getAdapter(dto.provider);
-    const timezone = dto.timezone || 'Asia/Jakarta';
 
     // Step 1: Ensure owner has a target calendar
     let targetCalendarId = dto.calendarId;
-    if (!targetCalendarId) {
+    if (targetCalendarId !== undefined) {
+      const ownedCalendar = await prisma.calendar.findFirst({ where: { id: targetCalendarId, ownerId } });
+      if (!ownedCalendar) throw new BadRequestException('Calendar not found for this owner');
+    } else {
       const defaultCal = await prisma.calendar.findFirst({
         where: { ownerId },
       });
@@ -146,7 +156,7 @@ export class MeetingsService {
         data: {
           ownerId,
           calendarId: targetCalendarId,
-          title: dto.title.trim(),
+          title,
           startsAt,
           endsAt,
           timezone,
@@ -168,7 +178,7 @@ export class MeetingsService {
       await createOutboxEvent(tx, {
         aggregateType: 'meeting',
         aggregateId: meeting.id,
-        eventType: 'meeting.provisioning.requested.v1',
+        eventType: customJoinUrl === undefined ? 'meeting.provisioning.requested.v1' : 'meeting.link.requested.v1',
         payload: {
           meetingId: meeting.id,
           provider: meeting.provider,
@@ -184,22 +194,35 @@ export class MeetingsService {
       return { meeting, calEvent };
     });
 
-    // Step 3: Execute provider adapter to confirm external provisioning
+    // Step 3: Execute provider adapter or use user-provided joinUrl
     try {
-      const providerResult = await adapter.createMeeting({
-        title: dto.title.trim(),
-        startsAt,
-        endsAt,
-        timezone,
-      });
+      let finalExternalId: string | null;
+      let finalJoinUrl: string;
+
+      if (customJoinUrl !== undefined) {
+        finalJoinUrl = customJoinUrl;
+        finalExternalId = null;
+      } else {
+        const providerResult = await adapter.createMeeting({
+          title,
+          startsAt,
+          endsAt,
+          timezone,
+        });
+        if (providerResult.status !== 'confirmed' || !providerResult.externalMeetingId) {
+          throw new Error('Provider did not confirm meeting provisioning');
+        }
+        finalExternalId = providerResult.externalMeetingId;
+        finalJoinUrl = validateMeetingJoinUrl(providerResult.joinUrl);
+      }
 
       // Step 4: Atomic update to confirmed status + confirmed outbox event
       const confirmed = await prisma.$transaction(async (tx) => {
         const m = await tx.meeting.update({
           where: { id: initial.meeting.id },
           data: {
-            externalMeetingId: providerResult.externalMeetingId,
-            joinUrl: providerResult.joinUrl,
+            externalMeetingId: finalExternalId,
+            joinUrl: finalJoinUrl,
             provisioningStatus: 'confirmed',
           },
         });
@@ -207,12 +230,13 @@ export class MeetingsService {
         await createOutboxEvent(tx, {
           aggregateType: 'meeting',
           aggregateId: m.id,
-          eventType: 'meeting.provisioning.confirmed.v1',
+          eventType: customJoinUrl === undefined ? 'meeting.provisioning.confirmed.v1' : 'meeting.link.saved.v1',
           payload: {
             meetingId: m.id,
             provider: m.provider,
             externalMeetingId: m.externalMeetingId,
             joinUrl: m.joinUrl,
+            linkProvenance: meetingLinkProvenance(m),
           },
           traceId,
         });
@@ -223,13 +247,13 @@ export class MeetingsService {
       this.auditService.record({
         actorType: 'user',
         actorId: ownerId,
-        action: 'meeting.created',
+        action: customJoinUrl === undefined ? 'meeting.created' : 'meeting.link.saved',
         target: confirmed.id,
         traceId,
         metadata: {
           provider: confirmed.provider,
           externalMeetingId: confirmed.externalMeetingId,
-          joinUrl: confirmed.joinUrl,
+          linkProvenance: meetingLinkProvenance(confirmed),
         },
       });
 
@@ -240,6 +264,7 @@ export class MeetingsService {
           externalMeetingId: confirmed.externalMeetingId,
           joinUrl: confirmed.joinUrl,
           status: confirmed.provisioningStatus,
+          linkProvenance: meetingLinkProvenance(confirmed),
         },
       };
     } catch (err: unknown) {
@@ -270,38 +295,40 @@ export class MeetingsService {
   async updateMeeting(
     ownerId: string,
     id: string,
-    dto: { title?: string; startsAt?: string; endsAt?: string; timezone?: string },
+    dto: {
+      title?: string;
+      startsAt?: string;
+      endsAt?: string;
+      timezone?: string;
+      joinUrl?: string;
+    },
     traceId?: string,
   ) {
-    const meeting = await prisma.meeting.findFirst({
-      where: { id, ownerId },
-      include: { calendarEvent: true },
-    });
-
-    if (!meeting) {
-      throw new NotFoundException(`Meeting ${id} not found`);
-    }
-
-    const startsAt = dto.startsAt ? new Date(dto.startsAt) : undefined;
-    const endsAt = dto.endsAt ? new Date(dto.endsAt) : undefined;
-
-    if (startsAt && endsAt && startsAt >= endsAt) {
-      throw new BadRequestException('startsAt must be before endsAt');
-    }
+    const title = dto.title === undefined ? undefined : validateMeetingTitle(dto.title);
+    const startsAt = dto.startsAt === undefined ? undefined : validateMeetingInstant(dto.startsAt);
+    const endsAt = dto.endsAt === undefined ? undefined : validateMeetingInstant(dto.endsAt);
+    const timezone = dto.timezone === undefined ? undefined : validateMeetingTimezone(dto.timezone);
+    const joinUrl = dto.joinUrl === undefined ? undefined : validateMeetingJoinUrl(dto.joinUrl);
+    const changesSchedule = [title, startsAt, endsAt, timezone].some((value) => value !== undefined);
 
     const updated = await prisma.$transaction(async (tx) => {
-      let calEvent = meeting.calendarEvent;
-      if (calEvent && (dto.title || startsAt || endsAt || dto.timezone)) {
+      // Read the effective endpoints in the same transaction as the update.
+      const current = await tx.meeting.findFirst({ where: { id, ownerId }, include: { calendarEvent: true } });
+      if (!current) throw new NotFoundException(`Meeting ${id} not found`);
+      let calEvent = current.calendarEvent;
+      if (changesSchedule) {
+        if (!calEvent) throw new BadRequestException('Meeting has no calendar event to update');
+        validateMeetingRange(startsAt ?? calEvent.startsAt, endsAt ?? calEvent.endsAt);
         calEvent = await tx.calendarEvent.update({
           where: { id: calEvent.id },
-          data: {
-            title: dto.title ?? undefined,
-            startsAt: startsAt ?? undefined,
-            endsAt: endsAt ?? undefined,
-            timezone: dto.timezone ?? undefined,
-          },
+          data: { title, startsAt, endsAt, timezone, version: { increment: 1 } },
         });
       }
+
+      const updatedMeeting = joinUrl === undefined ? current : await tx.meeting.update({
+        where: { id },
+        data: { joinUrl },
+      });
 
       await createOutboxEvent(tx, {
         aggregateType: 'meeting',
@@ -311,7 +338,7 @@ export class MeetingsService {
         traceId,
       });
 
-      return { ...meeting, calendarEvent: calEvent };
+      return { ...updatedMeeting, calendarEvent: calEvent };
     });
 
     return {
@@ -320,6 +347,7 @@ export class MeetingsService {
         provider: updated.provider,
         externalMeetingId: updated.externalMeetingId,
         joinUrl: updated.joinUrl,
+        linkProvenance: meetingLinkProvenance(updated),
         provisioningStatus: updated.provisioningStatus,
         calendarEvent: updated.calendarEvent
           ? {

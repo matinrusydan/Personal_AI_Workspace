@@ -15,36 +15,28 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-border md:bg-surface">
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Workspace
-        </div>
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex h-10 items-center rounded-md px-3 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-action-primary/10 text-action-primary font-semibold'
-                    : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      <div className="border-t border-border p-4 text-xs text-text-muted">
-        <div>PostgreSQL 16 &bull; BullMQ Active</div>
-        <div className="mt-1 text-[11px] text-text-muted/70">Single-owner Local Mode</div>
+    <aside className="hidden shrink-0 flex-col border-r border-border bg-surface md:flex md:w-56">
+      <nav aria-label="Workspace" className="flex flex-col gap-1 p-4">
+        {navItems.map((item) => {
+          const current =
+            item.href === '/'
+              ? pathname === '/'
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={current ? 'page' : undefined}
+              className={`flex min-h-touch items-center rounded-md px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-focusRing ${current ? 'bg-surface-subtle font-semibold text-action-primary' : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'}`}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="mt-auto border-t border-border p-4 text-xs leading-relaxed text-text-secondary">
+        Your schedule, tasks, and reminders in one place.
       </div>
     </aside>
   );

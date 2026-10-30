@@ -15,12 +15,19 @@ export const ServerEnvSchema = z.object({
   // Redis configuration
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
-  // Auth secrets (MFA, JWT sessions)
-  JWT_SECRET: z.string().min(32).default('dev-secret-must-be-changed-in-production-min-32-chars'),
-  JWT_EXPIRES_IN: z.string().default('7d'),
+  // Opaque sessions and one-time, explicitly enabled owner bootstrap.
+  AUTH_ENCRYPTION_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/, 'Expected a 32-byte hex key').optional(),
+  AUTH_BOOTSTRAP_ENABLED: z.enum(['true', 'false']).default('false'),
+  AUTH_SETUP_TOKEN: z.string().min(32).optional(),
+  APP_ORIGIN: z.string().url().optional(),
+  PAW_API_URL: z.string().url().optional(),
 
-  // Owner allowlist
-  OWNER_EMAIL: z.string().email().default('owner@example.com'),
+  // Legacy JWT config remains for compatibility with non-auth modules only.
+  JWT_SECRET: z.string().min(32).optional(),
+  JWT_EXPIRES_IN: z.string().optional(),
+
+  // Owner identity must be explicitly configured; no fixture account is accepted.
+  OWNER_EMAIL: z.string().email().optional(),
 
   // Optional integrations (disabled by default in Phase 0/1)
   TELEGRAM_BOT_TOKEN: z.string().optional(),

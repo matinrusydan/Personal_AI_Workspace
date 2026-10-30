@@ -30,66 +30,34 @@ export class GoogleMeetAdapter implements IMeetingProviderAdapter {
   readonly provider: MeetingProviderType = 'google-meet';
 
   async createMeeting(_params: CreateMeetingParams): Promise<ProviderMeetingResult> {
-    // In production with live tokens, calls:
-    // POST https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1
-    // with conferenceData.createRequest
-    const meetingCode = `gmt-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
-    const joinUrl = `https://meet.google.com/${meetingCode}`;
-
-    return {
-      externalMeetingId: meetingCode,
-      joinUrl,
-      status: 'confirmed',
-      providerData: {
-        entryPoints: [{ entryPointType: 'video', uri: joinUrl, label: 'meet.google.com' }],
-        conferenceSolution: {
-          name: 'Google Meet',
-          iconUri:
-            'https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png',
-        },
-      },
-    };
+    throw new Error('Google Calendar OAuth is not connected. Connect Google in Settings before provisioning Meet.');
   }
 
   async cancelMeeting(_externalMeetingId: string): Promise<boolean> {
-    return true;
+    throw new Error('Google Calendar OAuth is not connected. Cannot cancel the provider meeting.');
   }
 
   async checkHealth(): Promise<boolean> {
-    return true;
+    return false;
   }
 }
 
 /**
  * Zoom Meetings Provider Adapter (P0 MVP)
- * Creates Zoom Meeting via POST /users/me/meetings (docs/INTEGRATIONS.md)
+ * Fails closed until a real OAuth API implementation and token are configured.
  */
 export class ZoomMeetingAdapter implements IMeetingProviderAdapter {
   readonly provider: MeetingProviderType = 'zoom';
 
-  async createMeeting(params: CreateMeetingParams): Promise<ProviderMeetingResult> {
-    // In production with live tokens, calls:
-    // POST https://api.zoom.us/v2/users/me/meetings
-    const zoomNumericId = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-    const joinUrl = `https://zoom.us/j/${zoomNumericId}`;
-
-    return {
-      externalMeetingId: zoomNumericId,
-      joinUrl,
-      status: 'confirmed',
-      providerData: {
-        type: 2, // Scheduled meeting
-        duration: Math.round((params.endsAt.getTime() - params.startsAt.getTime()) / 60000),
-        timezone: params.timezone,
-      },
-    };
+  async createMeeting(_params: CreateMeetingParams): Promise<ProviderMeetingResult> {
+    throw new Error('Zoom OAuth is not connected. Connect Zoom in Settings before provisioning a meeting.');
   }
 
   async cancelMeeting(_externalMeetingId: string): Promise<boolean> {
-    return true;
+    throw new Error('Zoom OAuth is not connected. Cannot cancel the provider meeting.');
   }
 
   async checkHealth(): Promise<boolean> {
-    return true;
+    return false;
   }
 }

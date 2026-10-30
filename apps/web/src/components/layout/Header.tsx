@@ -1,150 +1,70 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
-import { devicesApi } from '@/lib/api';
+import { authApi } from '@/lib/api';
+import { isUnauthorized, redirectToLogin, useAccount } from '../shared/SessionContext';
+import { useToast } from '../shared/ToastProvider';
+import { secondaryButton } from '../shared/ResourceState';
 
 export function Header() {
-  const [deviceStatus, setDeviceStatus] = useState<string>('Connecting...');
-  const [isReady, setIsReady] = useState(false);
+  const account = useAccount();
+  const toast = useToast();
+  const [signingOut, setSigningOut] = useState(false);
+  const pending = useRef(false);
 
-  useEffect(() => {
-    async function enrollAndCheckDevices() {
-      try {
-        let installId = localStorage.getItem('paw_web_install_id');
-        if (!installId) {
-          installId = `web-client-${Math.random().toString(36).substring(2, 9)}`;
-          localStorage.setItem('paw_web_install_id', installId);
-        }
-
-        // Register this browser client into PostgreSQL devices table
-        await devicesApi.register({
-          platform: 'web',
-          installId,
-          deviceName: 'Web Desktop Browser',
-        });
-
-        // Query active devices in database
-        const res = await devicesApi.list();
-        const devices = res.data || [];
-        const iosDevice = devices.find((d: any) => d.platform === 'ios');
-
-        if (iosDevice) {
-          setDeviceStatus('iPhone 12: Enrolled & Ready');
-          setIsReady(true);
-        } else {
-          setDeviceStatus(`Web Device Connected (${devices.length} Active)`);
-          setIsReady(true);
-        }
-      } catch {
-        setDeviceStatus('Device Sync: Offline');
-        setIsReady(false);
-      }
+  async function signOut() {
+    if (pending.current) return;
+    pending.current = true;
+    setSigningOut(true);
+    try {
+      await authApi.logout();
+      redirectToLogin();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        redirectToLogin();
+      } else
+        toast({ tone: 'error', message: 'Sign out could not be confirmed. Please try again.' });
+    } finally {
+      pending.current = false;
+      setSigningOut(false);
     }
-
-    enrollAndCheckDevices();
-  }, []);
+  }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
-      <div className="flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-3 text-decoration-none">
-          <div className="flex h-8 items-center text-text-primary">
-            {/* SVG Logo Matbrew */}
-            <svg
-              className="h-5 w-auto max-w-[140px] sm:max-w-[180px] text-text-primary"
-              viewBox="0 0 246 20"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+    <header className="sticky top-0 z-30 flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6">
+      <Link
+        href="/"
+        className="rounded-md text-base font-semibold tracking-tight text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focusRing"
+      >
+        Personal workspace
+      </Link>
+      <nav aria-label="Account" className="flex min-w-0 items-center gap-3">
+        {account ? (
+          <>
+            <Link
+              href="/settings#account"
+              className="max-w-48 truncate rounded-md py-2 text-sm text-text-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-focusRing"
+              aria-label={`Account settings for ${account.email}`}
             >
-              <path
-                d="M4.22098 6.28052L0 8.39102V9.92918V11.4673L3.14785 13.0413C4.86486 13.9355 6.86804 14.9371 7.61923 15.2591L8.94276 15.8672V14.4721V13.0413L5.90222 11.5389L2.89745 10.0007L5.90222 8.39102C8.90699 6.81708 8.94276 6.78131 8.94276 5.45778C8.94276 4.70659 8.83545 4.09848 8.69236 4.13425C8.51351 4.13425 6.51033 5.10007 4.22098 6.28052Z"
-                fill="currentColor"
-              />
-              <path
-                d="M13.568 9.58667C11.6006 14.845 9.95517 19.3522 9.84786 19.6026C9.74054 19.9603 10.0267 20.0676 11.0283 19.9603L12.3876 19.853L15.8574 10.5525C17.789 5.43721 19.4703 0.96582 19.6133 0.608109C19.828 0.107313 19.6491 0 18.5044 0H17.1094L13.568 9.58667Z"
-                fill="currentColor"
-              />
-              <path
-                d="M20.6502 5.42127C20.7575 6.7448 20.8648 6.85211 23.7622 8.3545L26.8028 9.92843L23.6907 11.5024L20.5786 13.0405V14.4714V15.9022L25.05 13.6844L29.5214 11.4308V9.92843V8.39027L25.2288 6.244C22.868 5.06356 20.8648 4.09774 20.7575 4.09774C20.6144 4.09774 20.5786 4.70584 20.6502 5.42127Z"
-                fill="currentColor"
-              />
-              <path
-                d="M38.3911 10.0002V19.4796H40.3585H42.3259V13.005V6.53042L45.4022 10.6799C47.0835 12.9692 48.5859 14.8293 48.6932 14.8293C48.8363 14.7936 50.2313 12.9692 51.8053 10.7156C53.3792 8.46206 54.81 6.63774 54.9531 6.60196C55.0962 6.60196 55.2035 9.49943 55.132 13.0408L55.0246 19.4796H56.9205H58.7806V10.0002V0.52087H56.849H54.8816L51.8053 4.81341C50.124 7.1743 48.6932 9.10594 48.6216 9.10594C48.5501 9.10594 47.155 7.1743 45.5095 4.81341L42.5048 0.52087H40.4658H38.3911V10.0002Z"
-                fill="currentColor"
-              />
-              <path
-                d="M68.463 1.30784C66.9964 5.09958 65.6013 8.35475 63.2762 13.3627C61.7738 16.5821 60.5576 19.3007 60.5576 19.3723C60.5576 19.4438 61.4877 19.4796 62.5966 19.408L64.6355 19.3007L67.8907 12.0749C69.6435 8.10435 71.1816 4.84918 71.2889 4.81341C71.3962 4.81341 72.1474 6.45888 72.9344 8.49784L74.401 12.1465L71.9686 12.2538L69.5004 12.3611V13.935V15.5448H72.8271H76.118L76.9765 17.5122L77.7993 19.4796H79.552C80.5179 19.4796 81.3048 19.3723 81.3048 19.1934C81.3048 19.0503 79.5163 14.7936 77.2985 9.74983L73.2563 0.52087H71.0028C68.9996 0.52087 68.7492 0.592413 68.463 1.30784Z"
-                fill="currentColor"
-              />
-              <path
-                d="M83.0815 2.13057V3.74027H85.9432H88.8049V11.6099V19.4796H90.5935H92.382V11.6099V3.74027H95.4226H98.4631V2.13057V0.52087H90.7723H83.0815V2.13057Z"
-                fill="currentColor"
-              />
-              <path
-                d="M100.234 2.1127V3.75817H105.171C110.68 3.75817 111.681 4.08011 111.681 5.86867C111.681 7.62145 110.572 8.22956 106.995 8.33688L103.811 8.47996V7.54991C103.811 6.65563 103.704 6.61986 102.023 6.61986H100.234V13.0587V19.4975H106.065C112.683 19.4975 114.328 19.0324 115.616 16.922C116.904 14.7757 116.296 10.9482 114.543 10.3758C113.827 10.1612 113.541 9.48155 114.149 9.48155C114.686 9.48155 115.616 7.12066 115.616 5.79713C115.616 4.43782 114.507 2.57772 113.005 1.46882C112.075 0.789165 111.431 0.717623 106.101 0.61031L100.234 0.502996V2.1127ZM111.86 12.1644C112.826 13.0944 113.005 14.3822 112.289 15.348C111.681 16.1708 109.606 16.6 106.423 16.6358H103.811V13.9529V11.2701H107.389C110.751 11.2701 111.073 11.3417 111.86 12.1644Z"
-                fill="currentColor"
-              />
-              <path
-                d="M118.077 10.0002V19.5153H119.865H121.654V16.4748V13.4342H123.907H126.125L128.271 16.4748L130.418 19.4796L132.886 19.5153C135.211 19.5153 135.318 19.4796 134.818 18.8715C133.601 17.4764 130.239 13.1123 130.239 12.9692C130.239 12.8619 130.811 12.4684 131.527 12.0392C134.066 10.5368 135.032 5.56459 133.208 3.13215C131.634 1.02165 130.597 0.735483 124.086 0.62817L118.077 0.485085V10.0002ZM128.772 4.3126C130.561 5.20688 130.847 7.74663 129.309 9.17747C128.486 9.92867 128.021 10.036 125.016 10.1433L121.654 10.2864V7.03121V3.77603H124.694C126.697 3.77603 128.128 3.95489 128.772 4.3126Z"
-                fill="currentColor"
-              />
-              <path
-                d="M136.836 10.0002V19.4796H144.348H151.86V17.8699V16.2244L146.316 16.3317L140.771 16.439V13.935V11.4311L145.779 11.5384L150.787 11.6457V10.036V8.39052H145.779H140.771V6.0654V3.74027H146.316H151.86V2.13057V0.52087H144.348H136.836V10.0002Z"
-                fill="currentColor"
-              />
-              <path
-                d="M153.677 0.963104C153.784 1.32082 155.215 5.61335 156.86 10.5498C159.829 19.4568 159.865 19.4926 160.938 19.5999C161.975 19.7072 162.011 19.6714 162.977 16.5593C163.478 14.8423 164.623 11.2652 165.481 8.61813L167.019 3.8248L169.237 10.7644C172.206 20.1007 172.063 19.743 173.136 19.5999C173.995 19.4926 174.245 18.9202 177.035 10.5498C178.681 5.61335 180.111 1.32082 180.219 0.963104C180.362 0.462309 180.183 0.354996 179.217 0.354996H178.037L176.677 4.75484C175.926 7.15151 174.817 10.6929 174.209 12.6245L173.1 16.1301L171.026 9.58395C169.881 5.97106 168.736 2.42972 168.557 1.67853C168.2 0.426537 168.057 0.319225 167.055 0.426538L165.982 0.533852L163.514 8.22465C162.19 12.4456 161.045 15.987 161.045 16.0943C161.045 16.2016 159.865 12.696 158.47 8.29619L155.93 0.354996H154.714C153.712 0.354996 153.533 0.462309 153.677 0.963104Z"
-                fill="currentColor"
-              />
-              <path
-                d="M182.038 10.0002V19.5153H186.545C191.804 19.5153 193.306 19.1576 195.309 17.4048C197.348 15.6878 198.493 13.1481 198.493 10.3579C198.493 6.35155 196.955 3.5614 193.771 1.77285C191.982 0.807026 191.589 0.735483 186.974 0.62817L182.038 0.485085V10.0002ZM191.517 3.09638C195.595 4.24106 197.455 9.78558 195.238 14.2212C194.2 16.2602 192.769 17.0471 189.55 17.4048C188.012 17.5837 186.223 17.691 185.544 17.6195L184.363 17.5122L184.256 10.1075L184.184 2.7029H187.118C188.763 2.7029 190.73 2.88175 191.517 3.09638Z"
-                fill="currentColor"
-              />
-              <path
-                d="M200.265 10.0002V19.4796H207.061H213.858V18.478V17.5122L208.134 17.6195L202.411 17.7268V14.4716V11.2522H207.598H212.785V10.1791V9.10594H207.598H202.411V5.88654V2.66714H208.134H213.858V1.59401V0.52087H207.061H200.265V10.0002Z"
-                fill="currentColor"
-              />
-              <path
-                d="M215.639 0.574541C215.711 0.753397 217.464 5.11748 219.503 10.3043L223.259 19.6763L224.475 19.569L225.727 19.4617L229.232 10.5189C231.2 5.5825 232.881 1.28996 232.988 0.932251C233.131 0.431456 232.953 0.324142 231.915 0.324142C231.2 0.324142 230.627 0.467226 230.627 0.646082C230.627 0.824938 229.232 4.61668 227.551 9.08807L224.439 17.1724L221.327 8.83767L218.179 0.502998L216.856 0.395685C216.14 0.324142 215.568 0.431456 215.639 0.574541Z"
-                fill="currentColor"
-              />
-              <path
-                d="M242.477 1.80361C241.225 3.16291 242.155 5.45226 243.944 5.45226C244.767 5.45226 245.804 4.23604 245.804 3.23445C245.804 2.41172 244.552 1.15973 243.729 1.15973C243.336 1.15973 242.799 1.4459 242.477 1.80361Z"
-                fill="currentColor"
-              />
-              <path
-                d="M241.902 12.391C241.902 13.8577 242.045 14.9308 242.26 14.9308C242.475 14.9308 242.618 15.2527 242.618 15.6104C242.618 16.0039 242.475 16.4332 242.26 16.5405C242.081 16.6478 241.902 17.2201 241.902 17.8282C241.902 19.116 242.546 19.1876 244.013 17.9713C245.229 16.934 245.944 14.2869 245.766 11.6398L245.658 10.1017L243.798 9.99437L241.902 9.88705V12.391Z"
-                fill="currentColor"
-              />
-            </svg>
-          </div>
-          <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-text-muted border border-border">
-            Workspace
-          </span>
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-4">
-        {/* Device Sync Status Badge */}
-        <div
-          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-            isReady
-              ? 'border-success/30 bg-success/10 text-success'
-              : 'border-border bg-surface-subtle text-text-muted'
-          }`}
-        >
-          <span className={`h-2 w-2 rounded-full ${isReady ? 'bg-success' : 'bg-text-muted'}`} />
-          <span>{deviceStatus}</span>
-        </div>
-
-        {/* User indicator */}
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-subtle border border-border text-xs font-medium text-text-secondary">
-            OW
-          </div>
-        </div>
-      </div>
+              <span className="hidden sm:inline">{account.email}</span>
+              <span className="sm:hidden">Account</span>
+            </Link>
+            <button
+              type="button"
+              className={secondaryButton}
+              disabled={signingOut}
+              onClick={signOut}
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </>
+        ) : (
+          <Link href="/login" className={secondaryButton}>
+            Sign in
+          </Link>
+        )}
+      </nav>
     </header>
   );
 }

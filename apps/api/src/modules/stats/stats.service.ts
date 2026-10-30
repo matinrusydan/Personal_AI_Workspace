@@ -46,7 +46,8 @@ export class StatsService {
       }),
     ]);
 
-    // Check if any device has been active in last 24 hours
+    // A recent heartbeat shows the app contacted the server; it does not prove
+    // AlarmKit authorization, successful local scheduling, or audible delivery.
     const activeIosDevice = devices.find(
       (d) => d.platform === 'ios' && Date.now() - d.lastSeenAt.getTime() < 86400000,
     );
@@ -66,10 +67,13 @@ export class StatsService {
           deviceName: d.deviceName,
           lastSeenAt: d.lastSeenAt.toISOString(),
           registeredAt: d.registeredAt.toISOString(),
+          connectionState: Date.now() - d.lastSeenAt.getTime() < 86400000 ? 'recently_seen' : 'stale',
         })),
-        isIosDeviceReady: !!activeIosDevice || devices.some((d) => d.platform === 'ios'),
+        // Heartbeat only: never claim AlarmKit is ready based on enrollment alone.
+        isIosDeviceReady: false,
+        iosDeviceRecentlySeen: !!activeIosDevice,
         outboxPendingCount,
-        systemHealth: '100% Outbox Sync Active',
+        systemHealth: outboxPendingCount === 0 ? 'outbox_empty_at_query_time' : 'outbox_pending',
         asOf: new Date().toISOString(),
       },
     };

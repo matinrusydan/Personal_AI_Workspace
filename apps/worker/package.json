@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
+    "dev": "node ../../scripts/watch-runner.mjs dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

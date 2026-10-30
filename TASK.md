@@ -46,5 +46,12 @@
 - [x] P5-04 VPS production deployment, later enhancements (Gmail/Drive, WhatsApp, IoT, habit tracker). [DONE 2026-10-30: Production docker-compose.yml configured with isolated private networks, healthchecks, and resource bounds; backup snapshot utilities verified; 90 total automated tests passing across monorepo].
 **Gate 5:** PASSED (Post-MVP AI Assistant, Ephemeral Agent Workers, Workflow Engine, and Production Ops fully operational and verified 2026-10-30).
 
+## Master Execution V2 — Reality-Based Recovery & Verification (2026-10-30)
+- [x] **P0-A Autentikasi Nyata & Proteksi Rute:** Menghapus dev bypass/hardcoded credentials; mengimplementasikan bootstrap sekali-pakai terenkripsi, sesi opaque 1 jam di PostgreSQL, BFF SameSite=Strict HttpOnly cookie, dan middleware proteksi rute server Next.js (307 redirect anonim ke `/login`). [PASS_REAL_LOCAL: 22/22 tes isolated + 4/4 tes middleware lulus; curl verifikasi 307 ke login].
+- [x] **P0-B Inventaris Perangkat & Status Terpercaya:** Menghapus auto-enrollment browser di Header; menambahkan pendaftaran eksplisit browser; Settings menampilkan 0 iPhone terverifikasi jika belum ada pairing fisik. [PASS_REAL_LOCAL].
+- [x] **P0-C Preservasi Zona Waktu Pertemuan & Tautan Kustom:** Preservasi wall-clock `Asia/Jakarta` 08:00 WIB dua arah; dukungan tautan kustom HTTPS persisten di PostgreSQL; adapter Google/Zoom fail-closed saat OAuth tidak terhubung. [PASS_REAL_LOCAL: 23/23 tes meeting-time + 43/43 tes service lulus].
+- [x] **P0-D Status Integrasi & Keamanan Akun:** Kartu integrasi Google/Zoom/Telegram jujur dilabeli `Not verified` dengan tombol nonaktif dan panduan server; bagian Keamanan Akun menampilkan status MFA nyata, recovery code tersisa, dan daftar sesi aktif beserta aksi cabut sesi. [PASS_REAL_LOCAL; Google/Zoom/Telegram: BLOCKED_EXTERNAL; Apple AlarmKit: BLOCKED_PHYSICAL].
+- [x] **Dokumentasi & Panduan Operator:** `docs/RECOVERY_V2_AUDIT.md`, `docs/RECOVERY_V2_TEST_REPORT.md`, dan `docs/OWNER_SETUP_GUIDE.md` dibuat secara lengkap dan transparan. [DONE 2026-10-30].
+
 ## Pelaporan task
 Pakai `templates/TASK_TEMPLATE.md`: scope, depends_on, files impacted, evidence/test, rollback, risk, approval owner. Agent tidak boleh menandai DONE dari rencana saja.

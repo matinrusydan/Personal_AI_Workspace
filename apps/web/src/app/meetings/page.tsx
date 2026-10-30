@@ -1,7 +1,12 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { meetingsApi } from '@/lib/api';
+import { useToast } from '@/components/shared/ToastProvider';
+import {
+  DEFAULT_MEETING_TIMEZONE, fromMeetingInput, toMeetingInput,
+  formatMeetingInstant, isHttpsMeetingLink, meetingStatusLabel,
+} from '@/lib/meeting-time';
 
 export interface MeetingItem {
   id: string;
@@ -10,7 +15,8 @@ export interface MeetingItem {
   startsAt: string;
   endsAt: string;
   timezone: string;
-  status: 'provisioning' | 'confirmed' | 'failed';
+  status: 'provisioning' | 'confirmed' | 'failed' | 'unknown';
+  linkProvenance?: 'user-provided' | 'unverified' | 'none';
   joinUrl?: string | null;
   externalMeetingId?: string | null;
   calendarEvent?: {
@@ -23,6 +29,8 @@ export interface MeetingItem {
 }
 
 export default function MeetingsPage() {
+  const show = useToast();
+  const [timezone, setTimezone] = useState(DEFAULT_MEETING_TIMEZONE);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,8 +42,10 @@ export default function MeetingsPage() {
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const [joinUrlInput, setJoinUrlInput] = useState('');
   const [filterProvider, setFilterProvider] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -46,10 +56,11 @@ export default function MeetingsPage() {
         id: m.id,
         provider: m.provider,
         title: m.calendarEvent?.title || 'Video Meeting',
-        startsAt: m.calendarEvent?.startsAt || new Date().toISOString(),
-        endsAt: m.calendarEvent?.endsAt || new Date().toISOString(),
-        timezone: m.calendarEvent?.timezone || 'Asia/Jakarta',
-        status: m.provisioningStatus || m.status || 'confirmed',
+        startsAt: m.calendarEvent?.startsAt || '',
+        endsAt: m.calendarEvent?.endsAt || '',
+        timezone: m.calendarEvent?.timezone || DEFAULT_MEETING_TIMEZONE,
+        status: m.provisioningStatus || m.status || 'unknown',
+        linkProvenance: m.linkProvenance,
         joinUrl: m.joinUrl,
         externalMeetingId: m.externalMeetingId,
         calendarEvent: m.calendarEvent,
@@ -69,59 +80,71 @@ export default function MeetingsPage() {
 
   const handleSaveMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !startsAt || !endsAt) return;
-
     setIsSubmitting(true);
+    setFormError(null);
     try {
+      if (!title.trim()) throw new Error('Enter a meeting title');
+      // Preserve exact persisted instants (including seconds) on an unchanged edit.
+      const start = editingMeeting && startsAt === toMeetingInput(editingMeeting.startsAt, timezone)
+        ? editingMeeting.startsAt : fromMeetingInput(startsAt, timezone);
+      const end = editingMeeting && endsAt === toMeetingInput(editingMeeting.endsAt, timezone)
+        ? editingMeeting.endsAt : fromMeetingInput(endsAt, timezone);
+      if (new Date(start) >= new Date(end)) throw new Error('Start time must be before end time');
+      const linkChanged = !editingMeeting || joinUrlInput !== (editingMeeting.joinUrl || '');
+      if (linkChanged && joinUrlInput && !isHttpsMeetingLink(joinUrlInput)) throw new Error('Enter a valid HTTPS meeting link without credentials or whitespace');
+      if (editingMeeting?.joinUrl && !joinUrlInput) throw new Error('Enter a replacement HTTPS link; clearing a saved link is not supported');
+      const data = {
+        title: title.trim(), startsAt: start, endsAt: end, timezone,
+        joinUrl: linkChanged ? joinUrlInput || undefined : undefined,
+      };
       if (editingMeeting) {
-        await meetingsApi.update(editingMeeting.id, {
-          title: title.trim(),
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: new Date(endsAt).toISOString(),
-          timezone: 'Asia/Jakarta',
-        });
+        await meetingsApi.update(editingMeeting.id, data);
       } else {
-        await meetingsApi.create({
-          provider,
-          title: title.trim(),
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: new Date(endsAt).toISOString(),
-          timezone: 'Asia/Jakarta',
-        });
+        await meetingsApi.create({ provider, ...data });
       }
 
       setTitle('');
       setStartsAt('');
       setEndsAt('');
+      setJoinUrlInput('');
       setEditingMeeting(null);
       setIsDialogOpen(false);
       await fetchMeetings();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to provision meeting';
-      alert(`Error: ${msg}`);
+      const msg = err instanceof Error ? err.message : 'Gagal menyimpan meeting';
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteMeeting = async (id: string) => {
-    if (!confirm('Are you sure you want to cancel and delete this meeting?')) return;
+    if (!confirm('Delete this local meeting? This does not cancel a meeting with Google or Zoom.')) return;
     try {
       await meetingsApi.delete(id);
       await fetchMeetings();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to delete meeting';
-      alert(`Error: ${msg}`);
+      show({ message: msg, tone: 'error' });
     }
   };
 
   const openEditModal = (meeting: MeetingItem) => {
-    setEditingMeeting(meeting);
-    setProvider(meeting.provider);
-    setTitle(meeting.title);
-    setStartsAt(meeting.startsAt.substring(0, 16));
-    setEndsAt(meeting.endsAt.substring(0, 16));
-    setIsDialogOpen(true);
+    try {
+      const start = toMeetingInput(meeting.startsAt, meeting.timezone);
+      const end = toMeetingInput(meeting.endsAt, meeting.timezone);
+      setEditingMeeting(meeting);
+      setProvider(meeting.provider);
+      setTitle(meeting.title);
+      setTimezone(meeting.timezone);
+      setStartsAt(start);
+      setEndsAt(end);
+      setJoinUrlInput(meeting.joinUrl || '');
+      setFormError(null);
+      setIsDialogOpen(true);
+    } catch {
+      show({ message: 'This meeting has an invalid schedule or timezone and cannot be edited here', tone: 'error' });
+    }
   };
 
   const filteredMeetings = meetings.filter((m) => {
@@ -138,8 +161,8 @@ export default function MeetingsPage() {
             Meetings (Google Meet & Zoom)
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Provision video conferences with automatic calendar sync & reminder schedule (PostgreSQL
-            16 Authoritative)
+            Save your meeting link locally. Provider-generated links require a connected provider;
+            a saved link does not verify a Google Meet or Zoom conference.
           </p>
         </div>
 
@@ -147,9 +170,13 @@ export default function MeetingsPage() {
           type="button"
           onClick={() => {
             setEditingMeeting(null);
+            setProvider('google-meet');
             setTitle('');
             setStartsAt('');
             setEndsAt('');
+            setTimezone(DEFAULT_MEETING_TIMEZONE);
+            setJoinUrlInput('');
+            setFormError(null);
             setIsDialogOpen(true);
           }}
           className="inline-flex h-10 items-center justify-center rounded-md bg-action-primary px-4 text-sm font-semibold text-action-foreground shadow-sm hover:bg-action-primary-hover transition-colors"
@@ -230,9 +257,12 @@ export default function MeetingsPage() {
                     {meeting.provider === 'google-meet' ? 'Google Meet' : 'Zoom'}
                   </span>
 
-                  <span className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success border border-success/20">
-                    <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                    {meeting.status}
+                  <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold ${
+                    meeting.status === 'failed'
+                      ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                      : 'border-border bg-surface-subtle text-text-secondary'
+                  }`}>
+                    {meetingStatusLabel(meeting.status, meeting.joinUrl)}
                   </span>
                 </div>
 
@@ -240,25 +270,25 @@ export default function MeetingsPage() {
 
                 <div className="mt-2 space-y-1 text-xs text-text-secondary">
                   <div>
-                    📅{' '}
-                    {new Date(meeting.startsAt).toLocaleString('id-ID', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}{' '}
-                    -{' '}
-                    {new Date(meeting.endsAt).toLocaleTimeString('id-ID', {
-                      timeStyle: 'short',
-                    })}
+                    {formatMeetingInstant(meeting.startsAt, meeting.timezone)}
+                    {' — '}
+                    {formatMeetingInstant(meeting.endsAt, meeting.timezone)}
                   </div>
                   <div className="text-[11px] text-text-muted">Timezone: {meeting.timezone}</div>
+                  {meeting.joinUrl && (
+                    <p className="text-xs text-text-muted">
+                      {meeting.linkProvenance === 'user-provided' ? 'User-provided link' : 'Link provenance unverified'}
+                      {' · No provider verification'}
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="mt-5 pt-3 border-t border-border-subtle flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 truncate">
-                  {meeting.joinUrl && (
+                  {meeting.status === 'confirmed' && isHttpsMeetingLink(meeting.joinUrl) && (
                     <a
-                      href={meeting.joinUrl}
+                      href={meeting.joinUrl || undefined}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex h-8 items-center justify-center rounded-md bg-action-primary px-3 text-xs font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm transition-colors"
@@ -274,14 +304,14 @@ export default function MeetingsPage() {
                     onClick={() => openEditModal(meeting)}
                     className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-secondary hover:bg-surface-subtle"
                   >
-                    ✏️ Edit
+                    Edit
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDeleteMeeting(meeting.id)}
                     className="rounded border border-border bg-surface px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
                   >
-                    🗑️ Delete
+                    Delete
                   </button>
                 </div>
               </div>
@@ -301,13 +331,15 @@ export default function MeetingsPage() {
               <button
                 type="button"
                 onClick={() => setIsDialogOpen(false)}
+                disabled={isSubmitting}
+                aria-label="Close meeting dialog"
                 className="rounded p-1 text-text-muted hover:text-text-primary"
-              >
-                ✕
-              </button>
+              >Close</button>
             </div>
 
             <form onSubmit={handleSaveMeeting} className="mt-4 space-y-4">
+              <p className="text-sm text-text-secondary">All date/time fields use {timezone}.</p>
+              {formError && <p role="alert" className="rounded border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">{formError}</p>}
               {!editingMeeting && (
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -355,6 +387,22 @@ export default function MeetingsPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Custom Meeting Link / URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={joinUrlInput}
+                  onChange={(e) => setJoinUrlInput(e.target.value)}
+                  placeholder="e.g. https://meet.google.com/xxx-yyyy-zzz or https://zoom.us/j/123456789"
+                  className="mt-1 w-full rounded-md border border-border bg-surface-subtle px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-action-primary focus:outline-none"
+                />
+                <p className="mt-1 text-[11px] text-text-muted">
+                  {editingMeeting ? 'Saved exactly as entered. Links are not verified with the provider.' : 'Leave empty to request provider provisioning (requires a connected provider). A custom HTTPS link is saved locally, not provider verified.'}
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -386,6 +434,7 @@ export default function MeetingsPage() {
                 <button
                   type="button"
                   onClick={() => setIsDialogOpen(false)}
+                  disabled={isSubmitting}
                   className="rounded-md border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-subtle"
                 >
                   Cancel
@@ -396,10 +445,10 @@ export default function MeetingsPage() {
                   className="rounded-md bg-action-primary px-4 py-2 text-sm font-semibold text-action-foreground hover:bg-action-primary-hover shadow-sm disabled:opacity-50"
                 >
                   {isSubmitting
-                    ? 'Provisioning...'
+                    ? 'Saving...'
                     : editingMeeting
                       ? 'Update Meeting'
-                      : 'Provision Meeting'}
+                      : joinUrlInput ? 'Save Meeting Link' : 'Request Provider Meeting'}
                 </button>
               </div>
             </form>

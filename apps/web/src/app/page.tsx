@@ -1,160 +1,244 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { statsApi } from '@/lib/api';
+import { calendarApi, meetingsApi, tasksApi } from '@/lib/api';
+import { useAccount } from '@/components/shared/SessionContext';
+import {
+  ResourceNotice,
+  readList,
+  secondaryButton,
+  primaryButton,
+  useResource,
+} from '@/components/shared/ResourceState';
+import {
+  displayDate,
+  dueTasks,
+  todaysAgenda,
+  upcomingMeetings,
+  type AgendaEvent,
+  type DueTask,
+  type UpcomingMeeting,
+} from '@/components/shared/agenda';
+
+const loadTasks = async () => readList<DueTask>(await tasksApi.list());
+const loadMeetings = async () => readList<UpcomingMeeting>(await meetingsApi.list());
 
 export default function OverviewPage() {
-  const [stats, setStats] = useState({
-    activeTasksCount: 0,
-    totalTasksCount: 0,
-    todayMeetingsCount: 0,
-    totalMeetingsCount: 0,
-    devicesCount: 0,
-    isIosDeviceReady: false,
-    outboxPendingCount: 0,
-    systemHealth: '100% Outbox Sync Active',
-  });
-  const [loading, setLoading] = useState(true);
-
+  const account = useAccount();
+  const timezone = account?.timezone ?? 'Asia/Jakarta';
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    async function loadStats() {
-      try {
-        setLoading(true);
-        const res = await statsApi.overview();
-        if (res.data) {
-          setStats({
-            activeTasksCount: res.data.activeTasksCount || 0,
-            totalTasksCount: res.data.totalTasksCount || 0,
-            todayMeetingsCount: res.data.todayMeetingsCount || 0,
-            totalMeetingsCount: res.data.totalMeetingsCount || 0,
-            devicesCount: res.data.devicesCount || 0,
-            isIosDeviceReady: !!res.data.isIosDeviceReady,
-            outboxPendingCount: res.data.outboxPendingCount || 0,
-            systemHealth: res.data.systemHealth || '100% Outbox Sync Active',
-          });
-        }
-      } catch {
-        // Fallback gracefully if API not yet ready
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadStats();
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
   }, []);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const loadAgenda = useCallback(async () => {
+    const at = Date.now();
+    // A padded UTC window includes today's events in any IANA timezone.
+    return readList<AgendaEvent>(
+      await calendarApi.list(
+        new Date(at - 36 * 3600000).toISOString(),
+        new Date(at + 36 * 3600000).toISOString(),
+      ),
+    );
+    // Refresh the range when the account's local calendar day changes.
+  }, [today]);
+  const agenda = useResource(loadAgenda);
+  const tasks = useResource(loadTasks);
+  const meetings = useResource(loadMeetings);
+  const events =
+    agenda.state.status === 'success' ? todaysAgenda(agenda.state.data, now, timezone) : [];
+  const due = tasks.state.status === 'success' ? dueTasks(tasks.state.data, now) : [];
+  const upcoming =
+    meetings.state.status === 'success' ? upcomingMeetings(meetings.state.data, now) : [];
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Welcome back, Owner</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Personal AI Workspace &bull; Core platform running independently on local PostgreSQL &
-          BullMQ
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          <Link
-            href="/meetings"
-            className="inline-flex h-9 items-center justify-center rounded-md bg-action-primary px-3 text-xs font-semibold text-action-foreground shadow-sm hover:bg-action-primary-hover transition-colors"
-          >
-            + Create Meeting (Meet/Zoom)
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-text-secondary">
+            {new Intl.DateTimeFormat('en-GB', {
+              timeZone: timezone,
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            }).format(now)}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">
+            Your day, at a glance
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary">Agenda and deadlines · {timezone}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/tasks" className={primaryButton}>
+            Manage tasks
           </Link>
-          <Link
-            href="/tasks"
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:bg-surface transition-colors"
-          >
-            + New Task
-          </Link>
-          <Link
-            href="/calendar"
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:bg-surface transition-colors"
-          >
-            📅 View Calendar
+          <Link href="/calendar" className={secondaryButton}>
+            Open calendar
           </Link>
         </div>
       </div>
 
-      {/* KPI & Status Grid (Live Data from PostgreSQL 16) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-text-muted">Today's Agenda</div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {loading ? '...' : `${stats.todayMeetingsCount} Events`}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section
+          aria-labelledby="agenda-title"
+          className="rounded-xl border border-border bg-surface p-5 sm:p-6"
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 id="agenda-title" className="text-base font-semibold">
+              Today's agenda
+            </h2>
+            <button
+              type="button"
+              onClick={agenda.retry}
+              disabled={agenda.state.status === 'loading'}
+              className="min-h-touch rounded-md px-2 text-sm text-action-primary disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focusRing"
+            >
+              Refresh<span className="sr-only"> agenda</span>
+            </button>
           </div>
-          <div className="mt-1 text-xs text-text-muted">
-            {stats.totalMeetingsCount} Total Meetings Provisioned
-          </div>
-        </div>
+          {agenda.state.status !== 'success' ? (
+            <ResourceNotice
+              status={agenda.state.status}
+              noun="today's agenda"
+              onRetry={agenda.retry}
+            />
+          ) : events.length === 0 ? (
+            <p className="py-6 text-sm text-text-secondary">
+              No calendar events scheduled for today.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {events.map((event) => (
+                <li key={event.id} className="py-4">
+                  <p className="text-xs font-medium text-text-secondary">
+                    <time dateTime={event.startsAt}>
+                      {displayDate(event.startsAt, timezone, false)}
+                    </time>{' '}
+                    –{' '}
+                    <time dateTime={event.endsAt}>
+                      {displayDate(event.endsAt, timezone, false)}
+                    </time>
+                  </p>
+                  <Link
+                    href="/calendar"
+                    className="mt-1 block break-words text-sm font-medium text-text-primary hover:underline"
+                  >
+                    {event.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-text-muted">Active Tasks</div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {loading ? '...' : `${stats.activeTasksCount} Pending`}
+        <section
+          aria-labelledby="due-title"
+          className="rounded-xl border border-border bg-surface p-5 sm:p-6"
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 id="due-title" className="text-base font-semibold">
+                Due tasks
+              </h2>
+              <p className="mt-1 text-xs text-text-secondary">Overdue and due in the next 7 days</p>
+            </div>
+            <Link
+              href="/tasks"
+              className="min-h-touch rounded-md px-2 py-3 text-sm text-action-primary"
+            >
+              View all<span className="sr-only"> tasks</span>
+            </Link>
           </div>
-          <div className="mt-1 text-xs text-text-muted">
-            {stats.totalTasksCount} Total Tasks in PostgreSQL
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-text-muted">Registered Devices</div>
-          <div className="mt-2 flex items-center gap-2 text-base font-bold text-success">
-            <span className="h-2.5 w-2.5 rounded-full bg-success"></span>
-            {loading ? '...' : `${stats.devicesCount} Device${stats.devicesCount !== 1 ? 's' : ''}`}
-          </div>
-          <div className="mt-1 text-xs text-text-muted">
-            {stats.isIosDeviceReady ? 'iPhone AlarmKit Enrolled' : 'Web Browser Enrolled'}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-text-muted">Core Reliability</div>
-          <div className="mt-2 flex items-center gap-2 text-base font-bold text-action-primary">
-            <span className="h-2.5 w-2.5 rounded-full bg-action-primary"></span>
-            PostgreSQL 16
-          </div>
-          <div className="mt-1 text-xs text-text-muted">
-            {stats.outboxPendingCount === 0
-              ? 'Outbox 100% Synced'
-              : `${stats.outboxPendingCount} Outbox Pending`}
-          </div>
-        </div>
+          {tasks.state.status !== 'success' ? (
+            <ResourceNotice status={tasks.state.status} noun="due tasks" onRetry={tasks.retry} />
+          ) : due.length === 0 ? (
+            <p className="py-6 text-sm text-text-secondary">No open tasks due in this period.</p>
+          ) : (
+            <>
+              <ul className="divide-y divide-border">
+                {due.slice(0, 6).map((task) => (
+                  <li key={task.id} className="py-4">
+                    <Link href="/tasks" className="break-words text-sm font-medium hover:underline">
+                      {task.title}
+                    </Link>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      {Date.parse(task.dueAt!) < now ? 'Overdue · ' : 'Due · '}
+                      <time dateTime={task.dueAt!}>{displayDate(task.dueAt!, timezone)}</time>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              {due.length > 6 ? (
+                <p className="mt-3 text-xs text-text-secondary">
+                  Showing 6 of {due.length} due tasks. Open Tasks for the full list.
+                </p>
+              ) : null}
+            </>
+          )}
+        </section>
       </div>
 
-      {/* Architecture & Verification Checklist */}
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-text-primary">
-          Architecture Verification Status
-        </h2>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-text-secondary">
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> Full CRUD (Create, Read, Edit, Delete)
-            on Tasks & Calendar
+      <section
+        aria-labelledby="upcoming-title"
+        className="rounded-xl border border-border bg-surface p-5 sm:p-6"
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="upcoming-title" className="text-base font-semibold">
+              Upcoming meetings
+            </h2>
+            <p className="mt-1 text-xs text-text-secondary">
+              Meeting records do not verify provider connectivity.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> Real PostgreSQL 16 & Redis BullMQ
-            Integration (Zero Dummy Data)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> Google Meet & Zoom Video Provisioning
-            State Machine
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> Native iOS 26+ AlarmKit Client &
-            Device Sync Service
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> Telegram Gateway with Strict Owner
-            Allowlist Security
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-success font-bold">✔</span> AI Assistant Approval Gateway with
-            SHA-256 Anti-Tamper Digests
-          </div>
+          <Link href="/meetings" className={secondaryButton}>
+            Manage meetings
+          </Link>
         </div>
-      </div>
+        {meetings.state.status !== 'success' ? (
+          <ResourceNotice
+            status={meetings.state.status}
+            noun="upcoming meetings"
+            onRetry={meetings.retry}
+          />
+        ) : upcoming.length === 0 ? (
+          <p className="py-6 text-sm text-text-secondary">No upcoming meetings.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {upcoming.slice(0, 5).map((meeting) => (
+              <li
+                key={meeting.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-4"
+              >
+                <div>
+                  <Link
+                    href="/meetings"
+                    className="break-words text-sm font-medium hover:underline"
+                  >
+                    {meeting.calendarEvent!.title}
+                  </Link>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    <time dateTime={meeting.calendarEvent!.startsAt}>
+                      {displayDate(meeting.calendarEvent!.startsAt, timezone)}
+                    </time>{' '}
+                    · {meeting.provider}
+                  </p>
+                </div>
+                <span className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary">
+                  Provisioning: {meeting.provisioningStatus}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

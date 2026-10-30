@@ -1,6 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
-import * as jwt from 'jsonwebtoken';
-import { ServerEnvSchema } from '@paw/config';
+import { findActiveSession } from '../session-security';
 
 export interface AuthenticatedUser {
   userId: string;
@@ -10,29 +9,15 @@ export interface AuthenticatedUser {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly jwtSecret: string;
-
-  constructor() {
-    const config = ServerEnvSchema.parse(process.env);
-    this.jwtSecret = config.JWT_SECRET;
-  }
-
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
+    const header = request.headers.authorization;
+    if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Authentication required');
     }
-
-    const token = authHeader.substring(7);
-
-    try {
-      const decoded = jwt.verify(token, this.jwtSecret) as AuthenticatedUser;
-      request.user = decoded;
-      return true;
-    } catch {
-      throw new UnauthorizedException('Invalid or expired access token');
-    }
+    const session = await findActiveSession(header.slice(7));
+    if (!session) throw new UnauthorizedException('Authentication required');
+    request.user = { userId: session.user.id, email: session.user.email, sessionId: session.id } satisfies AuthenticatedUser;
+    return true;
   }
 }

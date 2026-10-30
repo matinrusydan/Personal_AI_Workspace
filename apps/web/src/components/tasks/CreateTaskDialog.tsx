@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import { TaskItem } from './TaskCard';
@@ -53,9 +53,7 @@ export function CreateTaskDialog({ isOpen, onClose, onSubmit }: CreateTaskDialog
             type="button"
             onClick={onClose}
             className="rounded p-1 text-text-muted hover:text-text-primary"
-          >
-            ✕
-          </button>
+          ></button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">

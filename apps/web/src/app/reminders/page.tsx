@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { remindersApi, devicesApi } from '@/lib/api';
@@ -110,7 +110,7 @@ export default function RemindersPage() {
           onClick={fetchReminders}
           className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-surface-subtle px-4 text-sm font-semibold text-text-primary hover:bg-surface transition-colors"
         >
-          🔄 Refresh State
+          Refresh State
         </button>
       </div>
 
@@ -192,8 +192,8 @@ export default function RemindersPage() {
                     </span>
                     <span className="rounded px-1.5 py-0.5 text-[10px] font-bold border border-orange-500/30 bg-orange-500/10 text-orange-500">
                       {rule.channelPolicy === 'prominent_alarm'
-                        ? '🔔 iPhone Alarm'
-                        : '⏰ Standard Reminder'}
+                        ? ' iPhone Alarm'
+                        : ' Standard Reminder'}
                     </span>
                     <span className="text-xs text-text-muted">({rule.offsetMinutes}m offset)</span>
                   </div>
@@ -203,7 +203,7 @@ export default function RemindersPage() {
                     onClick={() => handleDeleteRule(rule.id)}
                     className="rounded border border-border px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
                   >
-                    🗑️ Delete Rule
+                    Delete Rule
                   </button>
                 </div>
 
@@ -216,7 +216,7 @@ export default function RemindersPage() {
                     >
                       <div className="flex items-center gap-2">
                         <span>
-                          📅{' '}
+                          {' '}
                           {new Date(occ.scheduledFor).toLocaleString('id-ID', {
                             dateStyle: 'medium',
                             timeStyle: 'short',

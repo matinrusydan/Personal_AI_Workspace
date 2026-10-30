@@ -15,7 +15,7 @@ export class TotpService {
   }
 
   /**
-   * Generates 8 single-use recovery codes (e.g. "A1B2-C3D4")
+   * Generates 8 single-use recovery codes, each containing 128 random bits.
    * Returns plaintext codes for display to the user, and hashed codes for secure storage.
    */
   generateRecoveryCodes(count = 8): { plainCodes: string[]; hashedCodes: string[] } {
@@ -23,9 +23,8 @@ export class TotpService {
     const hashedCodes: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const part1 = randomBytes(2).toString('hex').toUpperCase();
-      const part2 = randomBytes(2).toString('hex').toUpperCase();
-      const code = `${part1}-${part2}`;
+      // 128 bits of entropy per single-use recovery code.
+      const code = randomBytes(16).toString('hex').toUpperCase().match(/.{4}/g)!.join('-');
       plainCodes.push(code);
       hashedCodes.push(this.hashRecoveryCode(code));
     }
@@ -93,20 +92,23 @@ export class TotpService {
    * Verifies TOTP token with a drift window of +-1 step (30 seconds)
    */
   verifyToken(secretBase32: string, token: string, timestampMs = Date.now()): boolean {
-    const normalizedToken = token.trim();
-    if (normalizedToken.length !== this.digits) {
-      return false;
-    }
+    return this.matchingStep(secretBase32, token, timestampMs) !== null;
+  }
 
+  matchingStep(secret: string, token: string, timestampMs = Date.now()): number | null {
+    if (!/^\d{6}$/.test(token)) return null;
     for (let delta = -1; delta <= 1; delta++) {
-      const candidateTime = timestampMs + delta * this.stepSeconds * 1000;
-      const expectedToken = this.generateToken(secretBase32, candidateTime);
-      if (expectedToken === normalizedToken) {
-        return true;
+      const time = timestampMs + delta * this.stepSeconds * 1000;
+      const expected = this.generateToken(secret, time);
+      if (timingSafeEqual(Buffer.from(expected), Buffer.from(token))) {
+        return Math.floor(time / 1000 / this.stepSeconds);
       }
     }
+    return null;
+  }
 
-    return false;
+  provisioningUri(email: string, secret: string): string {
+    return `otpauth://totp/${encodeURIComponent(`Personal AI Workspace:${email}`)}?${new URLSearchParams({ secret, issuer: 'Personal AI Workspace', algorithm: 'SHA1', digits: '6', period: '30' })}`;
   }
 
   // --- Base32 Encoding/Decoding RFC 4648 ---

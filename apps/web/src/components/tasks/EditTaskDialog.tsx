@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { TaskItem } from './TaskCard';
@@ -85,9 +85,7 @@ export function EditTaskDialog({ isOpen, task, onClose, onSubmit }: EditTaskDial
             type="button"
             onClick={onClose}
             className="rounded p-1 text-text-muted hover:text-text-primary"
-          >
-            ✕
-          </button>
+          ></button>
         </div>
 
         {error && (
